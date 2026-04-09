@@ -1,13 +1,13 @@
 import Link from "next/link";
+import { startOfWeek, endOfWeek } from "date-fns";
 import { requireUser } from "@/lib/auth/get-user";
 import { getStudentsByUserId } from "@/lib/queries/students";
 import { getUpcomingIEPReviews } from "@/lib/queries/ieps";
-import { getTodaysSessions, getSessionsForDateRange } from "@/lib/queries/sessions";
+import { getSessionsForCalendar } from "@/lib/queries/sessions";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { CaseloadPanel } from "@/components/dashboard/caseload-panel";
-import { TodaysSessionsPanel } from "@/components/dashboard/todays-sessions-panel";
-import { ScheduleCalendar } from "@/components/dashboard/schedule-calendar";
+import { DashboardCalendar } from "@/components/dashboard/dashboard-calendar";
 import { AlertTriangle, Calendar, Plus, Users } from "lucide-react";
 import { getUrgencyLevel } from "@/lib/utils/format-date";
 import { cn } from "@/lib/utils";
@@ -17,55 +17,37 @@ export const metadata = { title: "Dashboard" };
 export default async function DashboardPage() {
   const user = await requireUser();
 
-  // Date range for calendar: today → 60 days out
-  const today = new Date();
-  const calendarEnd = new Date(today);
-  calendarEnd.setDate(calendarEnd.getDate() + 60);
+  // Seed the calendar with the current week's sessions
+  const today     = new Date();
+  const weekStart = startOfWeek(today, { weekStartsOn: 0 });
+  const weekEnd   = endOfWeek(today,   { weekStartsOn: 0 });
 
-  const [students, upcomingReviews, todaysSessions, calendarSessions] =
-    await Promise.all([
-      getStudentsByUserId(user.id),
-      getUpcomingIEPReviews(user.id, 60),
-      getTodaysSessions(user.id),
-      getSessionsForDateRange(user.id, today, calendarEnd),
-    ]);
-
-  // Build calendar events
-  const calendarEvents = [
-    ...calendarSessions.map((s) => ({
-      date: s.sessionDate.toISOString(),
-      type: "session" as const,
-      label: s.sessionStudents
-        .map((ss) => `${ss.student.firstName} ${ss.student.lastName}`)
-        .join(", "),
-    })),
-    ...upcomingReviews.map((iep) => ({
-      date: new Date(iep.reviewDate).toISOString(),
-      type: "iep" as const,
-      label: `IEP review — ${iep.student.firstName} ${iep.student.lastName}`,
-    })),
-  ];
+  const [students, upcomingReviews, initialSessions] = await Promise.all([
+    getStudentsByUserId(user.id),
+    getUpcomingIEPReviews(user.id, 60),
+    getSessionsForCalendar(user.id, weekStart, weekEnd),
+  ]);
 
   const urgentIEPs = upcomingReviews.filter(
-    (iep) => getUrgencyLevel(iep.reviewDate) !== "soon"
+    iep => getUrgencyLevel(iep.reviewDate) !== "soon"
   );
 
   return (
-    <div className="flex flex-col gap-4 h-full max-w-[1400px]">
-      {/* Page header */}
-      <div className="flex items-center justify-between">
+    <div className="flex flex-col gap-4 h-full max-w-[1600px]">
+
+      {/* ── Page header ── */}
+      <div className="flex items-center justify-between shrink-0">
         <div>
           <h1 className="text-xl font-semibold">
             Good {getGreeting()}, {user.firstName}
           </h1>
           <p className="text-sm text-muted-foreground mt-0.5">
-            {new Date().toLocaleDateString("en-US", {
-              weekday: "long",
-              month: "long",
-              day: "numeric",
+            {today.toLocaleDateString("en-US", {
+              weekday: "long", month: "long", day: "numeric",
             })}
           </p>
         </div>
+
         <div className="flex items-center gap-2">
           {urgentIEPs.length > 0 && (
             <Link
@@ -88,10 +70,10 @@ export default async function DashboardPage() {
         </div>
       </div>
 
-      {/* Main 2-column layout */}
-      <div className="grid grid-cols-1 lg:grid-cols-[1fr_1.15fr] gap-4 flex-1 min-h-0">
+      {/* ── Two-column layout: Caseload | Calendar ── */}
+      <div className="grid grid-cols-1 lg:grid-cols-[320px_1fr] gap-4 flex-1 min-h-0">
 
-        {/* ── LEFT: Caseload panel ── */}
+        {/* LEFT: Caseload */}
         <Card className="flex flex-col min-h-0">
           <CardHeader className="pb-3 shrink-0">
             <CardTitle className="text-sm font-semibold flex items-center justify-between">
@@ -109,96 +91,58 @@ export default async function DashboardPage() {
             </CardTitle>
           </CardHeader>
           <CardContent className="flex-1 min-h-0 overflow-hidden pt-0">
+            <p className="text-xs text-muted-foreground mb-3 italic">
+              Drag a name onto the calendar to schedule a session
+            </p>
             <CaseloadPanel
-              students={students.map((s) => ({
-                id: s.id,
+              students={students.map(s => ({
+                id:        s.id,
                 firstName: s.firstName,
-                lastName: s.lastName,
-                goals: s.goals,
-                ieps: s.ieps.map((iep) => ({
-                  id: iep.id,
-                  status: iep.status,
+                lastName:  s.lastName,
+                goals:     s.goals,
+                ieps:      s.ieps.map(iep => ({
+                  id:         iep.id,
+                  status:     iep.status,
                   reviewDate: iep.reviewDate,
-                  studentId: s.id,
+                  studentId:  s.id,
                 })),
               }))}
             />
           </CardContent>
         </Card>
 
-        {/* ── RIGHT: stacked panels ── */}
-        <div className="flex flex-col gap-4 min-h-0">
+        {/* RIGHT: Calendar */}
+        <Card className="flex flex-col min-h-0 overflow-hidden">
+          <CardHeader className="pb-3 shrink-0">
+            <CardTitle className="text-sm font-semibold flex items-center gap-2">
+              <Calendar className="h-4 w-4" />
+              Schedule
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="flex-1 min-h-0 overflow-hidden pt-0">
+            <DashboardCalendar
+              initialSessions={initialSessions.map(s => ({
+                id:             s.id,
+                sessionDate:    s.sessionDate,
+                sessionType:    s.sessionType,
+                startTime:      s.startTime,
+                durationMins:   s.durationMins,
+                isCancelled:    s.isCancelled,
+                hasNotes:       s.notes.length > 0,
+                sessionStudents: s.sessionStudents,
+              }))}
+            />
+          </CardContent>
+        </Card>
 
-          {/* TOP RIGHT: Today's sessions */}
-          <Card className="shrink-0">
-            <CardHeader className="pb-3">
-              <CardTitle className="text-sm font-semibold flex items-center justify-between">
-                <span className="flex items-center gap-2">
-                  <Calendar className="h-4 w-4" />
-                  Today&apos;s sessions
-                  {todaysSessions.length > 0 && (
-                    <span className="ml-1 inline-flex items-center justify-center rounded-full bg-primary/10 text-primary text-xs font-semibold h-5 w-5">
-                      {todaysSessions.length}
-                    </span>
-                  )}
-                </span>
-                <Link
-                  href="/sessions"
-                  className="text-xs text-primary font-normal hover:underline"
-                >
-                  All sessions →
-                </Link>
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="pt-0">
-              <TodaysSessionsPanel
-                sessions={todaysSessions.map((s) => ({
-                  id: s.id,
-                  sessionType: s.sessionType,
-                  startTime: s.startTime,
-                  durationMins: s.durationMins,
-                  sessionStudents: s.sessionStudents.map((ss) => ({
-                    student: {
-                      id: ss.student.id,
-                      firstName: ss.student.firstName,
-                      lastName: ss.student.lastName,
-                    },
-                  })),
-                }))}
-              />
-            </CardContent>
-          </Card>
-
-          {/* BOTTOM RIGHT: Schedule calendar */}
-          <Card className="flex-1 min-h-0 overflow-auto">
-            <CardHeader className="pb-2 shrink-0">
-              <CardTitle className="text-sm font-semibold flex items-center justify-between">
-                <span className="flex items-center gap-2">
-                  <Calendar className="h-4 w-4" />
-                  Schedule
-                </span>
-                <Link
-                  href="/schedule"
-                  className="text-xs text-primary font-normal hover:underline"
-                >
-                  Manage →
-                </Link>
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="pt-0">
-              <ScheduleCalendar events={calendarEvents} />
-            </CardContent>
-          </Card>
-
-        </div>
       </div>
     </div>
   );
 }
 
 function getGreeting(): string {
-  const hour = new Date().getHours();
-  if (hour < 12) return "morning";
-  if (hour < 17) return "afternoon";
+  const h = new Date().getHours();
+  if (h < 12) return "morning";
+  if (h < 17) return "afternoon";
   return "evening";
 }

@@ -2,7 +2,7 @@
 
 import { useState, useMemo } from "react";
 import Link from "next/link";
-import { Search, ChevronRight } from "lucide-react";
+import { Search, ChevronRight, GripVertical } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { IEPStatusBadge } from "@/components/shared/status-badge";
 import { cn } from "@/lib/utils";
@@ -114,38 +114,58 @@ export function CaseloadPanel({ students }: CaseloadPanelProps) {
                 reviewDate.getTime() - Date.now() < 30 * 24 * 60 * 60 * 1000;
 
               return (
-                <Link
+                <div
                   key={student.id}
-                  href={`/students/${student.id}/overview`}
-                  className="flex items-center justify-between px-1 py-2.5 hover:bg-muted/40 rounded-md transition-colors group"
+                  draggable
+                  onDragStart={(e) => {
+                    e.dataTransfer.setData(
+                      "application/json",
+                      JSON.stringify({
+                        studentId:   student.id,
+                        studentName: `${student.firstName} ${student.lastName}`,
+                      })
+                    );
+                    e.dataTransfer.effectAllowed = "copy";
+                  }}
+                  className="group flex items-center gap-1 cursor-grab active:cursor-grabbing"
                 >
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-2">
-                      <span className="text-sm font-medium truncate">
-                        {student.lastName}, {student.firstName}
-                      </span>
-                    </div>
-                    <div className="flex items-center gap-2 mt-0.5">
-                      {student.goals.length > 0 && (
-                        <span className="text-xs text-muted-foreground">
-                          {student.goals.length} goal{student.goals.length !== 1 ? "s" : ""}
+                  {/* Drag handle */}
+                  <GripVertical className="h-3.5 w-3.5 shrink-0 text-muted-foreground/20 group-hover:text-muted-foreground/50 transition-colors" />
+
+                  <Link
+                    href={`/students/${student.id}/overview`}
+                    draggable={false}
+                    className="flex flex-1 items-center justify-between px-1 py-2.5 hover:bg-muted/40 rounded-md transition-colors min-w-0"
+                    onClick={e => e.stopPropagation()}
+                  >
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm font-medium truncate">
+                          {student.lastName}, {student.firstName}
                         </span>
-                      )}
-                      {reviewDate && (
-                        <span className={cn(
-                          "text-xs",
-                          isDueSoon ? "text-amber-600 font-medium" : "text-muted-foreground"
-                        )}>
-                          · IEP {formatDate(reviewDate)}
-                        </span>
-                      )}
+                      </div>
+                      <div className="flex items-center gap-2 mt-0.5">
+                        {student.goals.length > 0 && (
+                          <span className="text-xs text-muted-foreground">
+                            {student.goals.length} goal{student.goals.length !== 1 ? "s" : ""}
+                          </span>
+                        )}
+                        {reviewDate && (
+                          <span className={cn(
+                            "text-xs",
+                            isDueSoon ? "text-amber-600 font-medium" : "text-muted-foreground"
+                          )}>
+                            · IEP {formatDate(reviewDate)}
+                          </span>
+                        )}
+                      </div>
                     </div>
-                  </div>
-                  <div className="flex items-center gap-2 ml-2 shrink-0">
-                    {iep && <IEPStatusBadge status={iep.status as never} />}
-                    <ChevronRight className="h-3.5 w-3.5 text-muted-foreground/40 group-hover:text-muted-foreground transition-colors" />
-                  </div>
-                </Link>
+                    <div className="flex items-center gap-2 ml-2 shrink-0">
+                      {iep && <IEPStatusBadge status={iep.status as never} />}
+                      <ChevronRight className="h-3.5 w-3.5 text-muted-foreground/40 group-hover:text-muted-foreground transition-colors" />
+                    </div>
+                  </Link>
+                </div>
               );
             })}
           </div>

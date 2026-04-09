@@ -4,8 +4,6 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   LayoutDashboard,
-  Users,
-  Calendar,
   ClipboardList,
   Settings,
   LogOut,
@@ -18,8 +16,6 @@ import { toast } from "sonner";
 
 const navItems = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
-  { href: "/students",  label: "Students",  icon: Users },
-  { href: "/schedule",  label: "Schedule",  icon: Calendar },
   { href: "/sessions",  label: "Sessions",  icon: ClipboardList },
 ];
 

@@ -70,6 +70,7 @@ interface ExtractedData {
   cueingLevel?: string | null;
   durationMins?: number | null;
   participation?: string | null;
+  setting?: string | null;
 }
 
 interface MatchedGoalData {
@@ -159,6 +160,16 @@ function extractFromText(text: string): ExtractedData {
   else if (/good\s*(?:participation|engagement|effort)/i.test(text)) result.participation = "good";
   else if (/fair\s*(?:participation|engagement)/i.test(text)) result.participation = "fair";
   else if (/poor\s*(?:participation|engagement)|refused/i.test(text)) result.participation = "poor";
+
+  // Setting / location extraction
+  if (/pull[- ]?out|resource\s*room|separate\s*room/i.test(text)) result.setting = "Pull-out Room";
+  else if (/speech\s*room|therapy\s*room|speech[- ]language\s*room/i.test(text)) result.setting = "Speech Room";
+  else if (/general\s*ed(?:ucation)?|inclusion|classroom/i.test(text)) result.setting = "Classroom";
+  else if (/hallway/i.test(text)) result.setting = "Hallway";
+  else if (/telehealth|virtual|remote\s*session|online\s*session/i.test(text)) result.setting = "Telehealth";
+  else if (/library/i.test(text)) result.setting = "Library";
+  else if (/cafeteria/i.test(text)) result.setting = "Cafeteria";
+  else if (/gym|gymnasium/i.test(text)) result.setting = "Gymnasium";
 
   return result;
 }
@@ -644,10 +655,45 @@ export function SessionNotePage({
   // Restored from saved voice-note transcripts so extracted fields survive navigation.
   const [summaryContext, setSummaryContext] = useState(initialSummaryContext);
 
-  const extracted = useMemo<ExtractedData>(
-    () => extractFromText(summaryContext),
-    [summaryContext]
-  );
+  // When the user types directly (no voice), use the note text as the extraction source.
+  // summaryContext (voice) always takes priority over typed text.
+  const [noteExtractionContext, setNoteExtractionContext] = useState(initialNote);
+
+  // ── Note draft (declared early so it's available in the `extracted` useMemo) ─
+  const [noteDraft, setNoteDraft] = useState(initialNote);
+
+  // ── Location / setting override ──────────────────────────────────────────────
+  // Allows editing the session setting directly from the structured data panel.
+  const [locationOverride, setLocationOverride] = useState<string | null>(null);
+
+  async function saveLocation(value: string) {
+    const trimmed = value.trim() || null;
+    setLocationOverride(trimmed);
+    try {
+      await fetch(`/api/sessions/${sessionId}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ location: trimmed }),
+      });
+    } catch {
+      toast.error("Failed to save setting");
+    }
+  }
+  const activeContext = summaryContext || noteExtractionContext;
+
+  const extracted = useMemo<ExtractedData>(() => {
+    const fromContext = extractFromText(activeContext);
+    // Also scan the note draft — the AI-generated note is often cleaner prose than the
+    // raw voice transcript, so fields like "setting" may appear there but not in the transcript.
+    const fromNote = noteDraft.trim() ? extractFromText(noteDraft) : {};
+    // Merge: context wins for any field it found; note draft fills in gaps.
+    return {
+      ...fromNote,
+      ...Object.fromEntries(
+        Object.entries(fromContext).filter(([, v]) => v != null)
+      ),
+    } as ExtractedData;
+  }, [activeContext, noteDraft]);
 
   // ── All goals across every student in this session ───────────────────────
   const allGoals = useMemo(
@@ -656,21 +702,31 @@ export function SessionNotePage({
   );
 
   /**
-   * Goals matched from the voice transcript, each enriched with per-goal
-   * extracted data and any previously saved DB data point.
-   * Before any recording, falls back to goals that already have saved data.
+   * Goals to show in the Clinical Data panel:
+   * - Voice transcript: keyword-match (existing behavior); fall back to saved data goals if nothing matched.
+   * - Typed note (no voice): show ALL goals so the user can see and edit any of them.
+   * - No context at all: show goals that already have saved data points.
    */
   const matchedGoals = useMemo<MatchedGoalData[]>(() => {
-    const goals = summaryContext.trim()
-      ? matchGoalsFromTranscript(summaryContext, allGoals)
-      : allGoals.filter((g) => !!initialGoalData[g.id]);
+    let goals: Goal[];
+    if (summaryContext.trim()) {
+      // Voice recording present — keyword-match to focus on mentioned goals
+      const matched = matchGoalsFromTranscript(summaryContext, allGoals);
+      goals = matched.length > 0 ? matched : allGoals.filter((g) => !!initialGoalData[g.id]);
+    } else if (noteExtractionContext.trim()) {
+      // Typed note — show every goal so the SLP can fill in data for any of them
+      goals = allGoals;
+    } else {
+      // Nothing yet — show goals that already have saved data
+      goals = allGoals.filter((g) => !!initialGoalData[g.id]);
+    }
 
     return goals.map((goal) => ({
       goal,
-      extracted: extractDataForGoal(summaryContext, goal),
+      extracted: extractDataForGoal(activeContext, goal),
       saved: initialGoalData[goal.id],
     }));
-  }, [summaryContext, allGoals, initialGoalData]);
+  }, [summaryContext, noteExtractionContext, activeContext, allGoals, initialGoalData]);
 
   // ── LLM-extracted structured data (keyed by goalId) ────────────────────────
   const [aiExtractions, setAiExtractions] = useState<Record<string, GoalAIExt>>({});
@@ -765,8 +821,7 @@ export function SessionNotePage({
     }
   }
 
-  // ── Note draft ───────────────────────────────────────────────────────────────
-  const [noteDraft, setNoteDraft] = useState(initialNote);
+  // ── Note draft (continued) ───────────────────────────────────────────────────
   const [generating, setGenerating] = useState(false);
   const [noteStatus, setNoteStatus] = useState<"idle" | "saving" | "saved">("idle");
   const [generatedAt, setGeneratedAt] = useState<Date | null>(
@@ -858,8 +913,19 @@ export function SessionNotePage({
   function handleNoteChange(text: string) {
     setNoteDraft(text);
     setNoteStatus("idle");
+    // Update regex extraction context immediately from typed text
+    // (only when there is no voice transcript — voice always takes priority)
+    if (!summaryContext.trim()) {
+      setNoteExtractionContext(text);
+    }
     if (noteDebouncRef.current) clearTimeout(noteDebouncRef.current);
-    noteDebouncRef.current = setTimeout(() => persistNote(text), 1500);
+    noteDebouncRef.current = setTimeout(() => {
+      persistNote(text);
+      // Run AI extraction against typed note if no voice context exists
+      if (!summaryContext.trim() && text.trim().length > 40) {
+        extractStructuredData(text);
+      }
+    }, 1500);
   }
 
   // ── Voice handler — receives transcript, updates context, auto-generates ────
@@ -913,17 +979,19 @@ export function SessionNotePage({
   const hasAnyGoalTrials   = matchedGoals.some((mg) => goalEffectiveTrials(mg,   aiExtractions[mg.goal.id], goalOverrides[mg.goal.id]) != null);
   const hasAnyGoalCueing   = matchedGoals.some((mg) => goalEffectiveCueing(mg,   aiExtractions[mg.goal.id], goalOverrides[mg.goal.id]) != null);
 
+  const effectiveDuration = durationMins || aiSessionData.duration || extracted.durationMins || null;
+  // Use || instead of ?? so empty strings ("") also fall through to the next source
+  const effectiveLocation = locationOverride || location || extracted.setting || null;
+
   const missingLabels: string[] = [];
-  if (!location) missingLabels.push("Setting");
-  if (!durationMins && !extracted.durationMins) missingLabels.push("Duration");
+  if (!effectiveLocation) missingLabels.push("Setting");
+  if (!effectiveDuration) missingLabels.push("Duration");
   if (anyPresent && matchedGoals.length === 0) missingLabels.push("Goals");
   if (anyPresent && matchedGoals.length > 0 && !hasAnyGoalAccuracy) missingLabels.push("Accuracy");
   if (anyPresent && matchedGoals.length > 0 && !hasAnyGoalTrials) missingLabels.push("# of Trials");
   if (anyPresent && matchedGoals.length > 0 && !hasAnyGoalCueing) missingLabels.push("Level of Support");
 
   const allFieldsCaptured = missingLabels.length === 0;
-
-  const effectiveDuration = durationMins ?? aiSessionData.duration ?? extracted.durationMins ?? null;
 
   // ─── Render ───────────────────────────────────────────────────────────────
 
@@ -952,10 +1020,10 @@ export function SessionNotePage({
             <Badge variant="secondary" className="text-xs">
               {SESSION_TYPE_LABELS[sessionType] ?? sessionType.replace(/_/g, " ")}
             </Badge>
-            {location && (
+            {effectiveLocation && (
               <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
                 <MapPin className="h-3.5 w-3.5 shrink-0" />
-                {location}
+                {effectiveLocation}
               </div>
             )}
             <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
@@ -1094,7 +1162,7 @@ export function SessionNotePage({
             <div className="px-5 py-3.5 border-b bg-muted/30">
               <h2 className="text-sm font-semibold">Structured Session Data</h2>
               <p className="text-xs text-muted-foreground mt-0.5">
-                Extracted from your recording and session data
+                Extracted from your note or recording — click any field to edit
               </p>
             </div>
 
@@ -1126,7 +1194,15 @@ export function SessionNotePage({
                     value={effectiveDuration ? `${effectiveDuration} min` : null}
                     missing={!effectiveDuration}
                   />
-                  <FieldRow icon={MapPin} label="Setting" value={location ?? null} missing={!location} />
+                  <EditableFieldRow
+                    icon={MapPin}
+                    label="Setting"
+                    rawValue={effectiveLocation ?? ""}
+                    displayValue={effectiveLocation}
+                    missing={!effectiveLocation}
+                    placeholder="e.g. Speech Room"
+                    onSave={saveLocation}
+                  />
                   <FieldRow icon={Info} label="Type"
                     value={SESSION_TYPE_LABELS[sessionType] ?? sessionType.replace(/_/g, " ")}
                   />
@@ -1214,7 +1290,7 @@ export function SessionNotePage({
                         <FieldRow label="Level of Support" value={null} missing />
                       </div>
                       <p className="text-xs text-muted-foreground italic mt-1">
-                        Goals will be detected automatically when you record your session summary.
+                        Goals appear automatically once you start typing your note or record your session summary.
                       </p>
                     </div>
                   ) : (

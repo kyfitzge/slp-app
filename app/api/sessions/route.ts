@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { requireUser } from "@/lib/auth/get-user";
-import { getSessionsByUserId, createSession } from "@/lib/queries/sessions";
+import { getSessionsByUserId, getSessionsForCalendar, createSession } from "@/lib/queries/sessions";
 import { createSessionSchema } from "@/lib/validations/session";
 import { z } from "zod";
 
@@ -8,6 +8,19 @@ export async function GET(request: Request) {
   try {
     const user = await requireUser();
     const { searchParams } = new URL(request.url);
+    const startDate = searchParams.get("startDate");
+    const endDate = searchParams.get("endDate");
+
+    // Calendar date-range query (used by DashboardCalendar)
+    if (startDate && endDate) {
+      const sessions = await getSessionsForCalendar(
+        user.id,
+        new Date(startDate + "T00:00:00"),
+        new Date(endDate + "T23:59:59"),
+      );
+      return NextResponse.json({ sessions });
+    }
+
     const studentId = searchParams.get("studentId") ?? undefined;
     const limit = searchParams.get("limit") ? Number(searchParams.get("limit")) : undefined;
     const sessions = await getSessionsByUserId(user.id, { studentId, limit });

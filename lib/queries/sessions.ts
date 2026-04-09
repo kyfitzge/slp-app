@@ -84,7 +84,10 @@ export async function createSession(data: CreateSessionInput, userId: string) {
         userId,
         scheduleEntryId: data.scheduleEntryId || undefined,
         sessionType: data.sessionType,
-        sessionDate: new Date(data.sessionDate),
+        // Append T12:00:00 (local noon) so the date is never shifted by timezone
+        // conversion. Plain "YYYY-MM-DD" is parsed as UTC midnight, which in
+        // US timezones becomes the previous calendar day.
+        sessionDate: new Date(data.sessionDate + "T12:00:00"),
         startTime: data.startTime,
         durationMins: data.durationMins,
         location: data.location,
@@ -160,6 +163,42 @@ export async function getSessionsForDateRange(
       sessionType: true,
       sessionStudents: {
         select: { student: { select: { firstName: true, lastName: true } } },
+      },
+    },
+    orderBy: { sessionDate: "asc" },
+  });
+}
+
+/** Full session shape needed by the dashboard calendar (includes time, duration, cancellation, notes). */
+export async function getSessionsForCalendar(
+  userId: string,
+  from: Date,
+  to: Date
+) {
+  return prisma.session.findMany({
+    where: {
+      userId,
+      sessionDate: { gte: from, lte: to },
+    },
+    select: {
+      id: true,
+      sessionDate: true,
+      sessionType: true,
+      startTime: true,
+      durationMins: true,
+      isCancelled: true,
+      sessionStudents: {
+        select: {
+          student: {
+            select: { id: true, firstName: true, lastName: true },
+          },
+        },
+      },
+      // One non-empty note is enough to mark as "notes complete"
+      notes: {
+        where: { noteText: { not: "" } },
+        select: { id: true },
+        take: 1,
       },
     },
     orderBy: { sessionDate: "asc" },
