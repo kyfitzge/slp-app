@@ -1,0 +1,473 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../app/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ─────────────────────────────────────────────
+// ENUMS
+// ─────────────────────────────────────────────
+
+enum DisabilityCategory {
+  SPEECH_LANGUAGE_IMPAIRMENT
+  AUTISM_SPECTRUM_DISORDER
+  INTELLECTUAL_DISABILITY
+  EMOTIONAL_BEHAVIORAL_DISORDER
+  LEARNING_DISABILITY
+  TRAUMATIC_BRAIN_INJURY
+  HEARING_IMPAIRMENT
+  VISUAL_IMPAIRMENT
+  DEVELOPMENTAL_DELAY
+  OTHER_HEALTH_IMPAIRMENT
+  MULTIPLE_DISABILITIES
+  OTHER
+}
+
+enum IEPStatus {
+  DRAFT
+  ACTIVE
+  IN_REVIEW
+  EXPIRED
+  DISCONTINUED
+}
+
+enum GoalStatus {
+  ACTIVE
+  MASTERED
+  DISCONTINUED
+  ON_HOLD
+}
+
+enum GoalDomain {
+  ARTICULATION
+  PHONOLOGY
+  LANGUAGE_EXPRESSION
+  LANGUAGE_COMPREHENSION
+  FLUENCY
+  VOICE
+  PRAGMATICS
+  AUGMENTATIVE_COMMUNICATION
+  LITERACY
+  SOCIAL_COMMUNICATION
+}
+
+enum CueingLevel {
+  INDEPENDENT
+  GESTURAL
+  INDIRECT_VERBAL
+  DIRECT_VERBAL
+  MODELING
+  PHYSICAL
+  MAXIMUM_ASSISTANCE
+}
+
+enum SessionType {
+  INDIVIDUAL
+  GROUP
+  CONSULTATION
+  EVALUATION
+  RE_EVALUATION
+  PARENT_CONFERENCE
+}
+
+enum AttendanceStatus {
+  PRESENT
+  ABSENT_EXCUSED
+  ABSENT_UNEXCUSED
+  CANCELLED_SLP
+  CANCELLED_SCHOOL
+  MAKEUP
+}
+
+enum ScheduleFrequency {
+  ONCE
+  WEEKLY
+  BIWEEKLY
+}
+
+enum GradeLevel {
+  PRE_K
+  KINDERGARTEN
+  GRADE_1
+  GRADE_2
+  GRADE_3
+  GRADE_4
+  GRADE_5
+  GRADE_6
+  GRADE_7
+  GRADE_8
+  GRADE_9
+  GRADE_10
+  GRADE_11
+  GRADE_12
+}
+
+// ─────────────────────────────────────────────
+// USER (SLP)
+// ─────────────────────────────────────────────
+
+model User {
+  id             String   @id @default(cuid())
+  supabaseUserId String   @unique
+  email          String   @unique
+  firstName      String
+  lastName       String
+  credentials    String?
+  schoolDistrict String?
+  licenseNumber  String?
+  phone          String?
+  avatarUrl      String?
+  isActive       Boolean  @default(true)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  caseloads         Caseload[]
+  sessions          Session[]
+  scheduleEntries   ScheduleEntry[]
+  progressSummaries ProgressSummary[]
+  voiceNotes        VoiceNote[]
+
+  @@map("users")
+}
+
+// ─────────────────────────────────────────────
+// STUDENT
+// ─────────────────────────────────────────────
+
+model Student {
+  id                  String             @id @default(cuid())
+  firstName           String
+  lastName            String
+  dateOfBirth         DateTime
+  gender              String?
+  pronouns            String?
+  schoolName          String
+  schoolDistrict      String?
+  gradeLevel          GradeLevel
+  teacherName         String?
+  classroom           String?
+  disabilityCategory  DisabilityCategory
+  eligibilityDate     DateTime?
+  reevaluationDue     DateTime?
+  parentGuardianName  String?
+  parentGuardianEmail String?
+  parentGuardianPhone String?
+  primaryLanguage     String             @default("English")
+  secondaryLanguage   String?
+  accommodations      String?
+  medicalAlerts       String?
+  externalProviders   String?
+  isActive            Boolean            @default(true)
+  archivedAt          DateTime?
+  createdAt           DateTime           @default(now())
+  updatedAt           DateTime           @updatedAt
+
+  caseloads         Caseload[]
+  ieps              IEP[]
+  goals             Goal[]
+  sessionStudents   SessionStudent[]
+  progressSummaries ProgressSummary[]
+
+  @@index([lastName, firstName])
+  @@index([schoolName])
+  @@map("students")
+}
+
+// ─────────────────────────────────────────────
+// CASELOAD
+// ─────────────────────────────────────────────
+
+model Caseload {
+  id         String    @id @default(cuid())
+  userId     String
+  studentId  String
+  assignedAt DateTime  @default(now())
+  removedAt  DateTime?
+  isPrimary  Boolean   @default(true)
+  notes      String?
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  student Student @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, studentId])
+  @@index([userId])
+  @@index([studentId])
+  @@map("caseloads")
+}
+
+// ─────────────────────────────────────────────
+// IEP
+// ─────────────────────────────────────────────
+
+model IEP {
+  id                String    @id @default(cuid())
+  studentId         String
+  status            IEPStatus @default(DRAFT)
+  effectiveDate     DateTime
+  reviewDate        DateTime
+  expirationDate    DateTime
+  meetingDate       DateTime?
+  nextEvalDate      DateTime?
+  minutesPerWeek    Int?
+  groupMinutes      Int?
+  individualMinutes Int?
+  serviceLocation   String?
+  presentLevels     String?
+  parentConcerns    String?
+  transitionNotes   String?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  student           Student           @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  goals             Goal[]
+  progressSummaries ProgressSummary[]
+
+  @@index([studentId])
+  @@index([reviewDate])
+  @@map("ieps")
+}
+
+// ─────────────────────────────────────────────
+// GOAL
+// ─────────────────────────────────────────────
+
+model Goal {
+  id                 String     @id @default(cuid())
+  studentId          String
+  iepId              String?
+  domain             GoalDomain
+  status             GoalStatus @default(ACTIVE)
+  goalText           String
+  shortName          String?
+  targetAccuracy     Float
+  targetTrials       Int?
+  targetConsecutive  Int?
+  baselineDate       DateTime?
+  baselineScore      Float?
+  baselineNotes      String?
+  masteryDate        DateTime?
+  discontinuedDate   DateTime?
+  discontinuedReason String?
+  reportingPeriod    String?
+  sortOrder          Int        @default(0)
+  createdAt          DateTime   @default(now())
+  updatedAt          DateTime   @updatedAt
+
+  student    Student         @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  iep        IEP?            @relation(fields: [iepId], references: [id], onDelete: SetNull)
+  dataPoints GoalDataPoint[]
+
+  @@index([studentId])
+  @@index([iepId])
+  @@index([status])
+  @@map("goals")
+}
+
+// ─────────────────────────────────────────────
+// GOAL DATA POINT
+// ─────────────────────────────────────────────
+
+model GoalDataPoint {
+  id            String      @id @default(cuid())
+  goalId        String
+  sessionId     String?
+  accuracy      Float
+  trialsCorrect Int?
+  trialsTotal   Int?
+  cueingLevel   CueingLevel @default(INDEPENDENT)
+  targetItem    String?
+  setting       String?
+  notes         String?
+  collectedAt   DateTime
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+
+  goal    Goal     @relation(fields: [goalId], references: [id], onDelete: Cascade)
+  session Session? @relation(fields: [sessionId], references: [id], onDelete: SetNull)
+
+  @@index([goalId])
+  @@index([sessionId])
+  @@index([collectedAt])
+  @@map("goal_data_points")
+}
+
+// ─────────────────────────────────────────────
+// SCHEDULE ENTRY
+// ─────────────────────────────────────────────
+
+model ScheduleEntry {
+  id           String            @id @default(cuid())
+  userId       String
+  title        String?
+  sessionType  SessionType       @default(INDIVIDUAL)
+  frequency    ScheduleFrequency @default(WEEKLY)
+  dayOfWeek    Int?
+  startTime    String
+  durationMins Int               @default(30)
+  startDate    DateTime
+  endDate      DateTime?
+  specificDate DateTime?
+  location     String?
+  isActive     Boolean           @default(true)
+  notes        String?
+  createdAt    DateTime          @default(now())
+  updatedAt    DateTime          @updatedAt
+
+  user             User                   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  scheduleStudents ScheduleEntryStudent[]
+  sessions         Session[]
+
+  @@index([userId])
+  @@index([dayOfWeek])
+  @@map("schedule_entries")
+}
+
+model ScheduleEntryStudent {
+  id              String   @id @default(cuid())
+  scheduleEntryId String
+  studentId       String
+  addedAt         DateTime @default(now())
+
+  scheduleEntry ScheduleEntry @relation(fields: [scheduleEntryId], references: [id], onDelete: Cascade)
+
+  @@unique([scheduleEntryId, studentId])
+  @@map("schedule_entry_students")
+}
+
+// ─────────────────────────────────────────────
+// SESSION
+// ─────────────────────────────────────────────
+
+model Session {
+  id                 String      @id @default(cuid())
+  userId             String
+  scheduleEntryId    String?
+  sessionType        SessionType @default(INDIVIDUAL)
+  sessionDate        DateTime
+  startTime          String?
+  durationMins       Int?
+  location           String?
+  isCancelled        Boolean     @default(false)
+  cancellationReason String?
+  generalNotes       String?
+  createdAt          DateTime    @default(now())
+  updatedAt          DateTime    @updatedAt
+
+  user            User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  scheduleEntry   ScheduleEntry?   @relation(fields: [scheduleEntryId], references: [id], onDelete: SetNull)
+  sessionStudents SessionStudent[]
+  dataPoints      GoalDataPoint[]
+  notes           SessionNote[]
+  voiceNotes      VoiceNote[]
+
+  @@index([userId])
+  @@index([sessionDate])
+  @@index([scheduleEntryId])
+  @@map("sessions")
+}
+
+model SessionStudent {
+  id             String           @id @default(cuid())
+  sessionId      String
+  studentId      String
+  attendance     AttendanceStatus @default(PRESENT)
+  attendanceNote String?
+
+  session Session @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  student Student @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  @@unique([sessionId, studentId])
+  @@index([studentId])
+  @@map("session_students")
+}
+
+// ─────────────────────────────────────────────
+// SESSION NOTE
+// ─────────────────────────────────────────────
+
+model SessionNote {
+  id            String    @id @default(cuid())
+  sessionId     String
+  studentId     String?
+  noteText      String
+  isLocked      Boolean   @default(false)
+  lockedAt      DateTime?
+  isAiGenerated Boolean   @default(false)
+  aiModel       String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  session Session @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@index([sessionId])
+  @@map("session_notes")
+}
+
+// ─────────────────────────────────────────────
+// VOICE NOTE (AI transcription + note drafting)
+// ─────────────────────────────────────────────
+
+enum VoiceNoteStatus {
+  PENDING
+  TRANSCRIBING
+  TRANSCRIBED
+  CLEANING
+  CLEANED
+  SAVED
+  ERROR
+}
+
+model VoiceNote {
+  id              String          @id @default(cuid())
+  sessionId       String
+  userId          String
+  rawTranscript   String?
+  cleanedNote     String?
+  editedNote      String?         // user's final edits before saving
+  structuredData  Json?           // goals, accuracy, cueing, participation, etc.
+  status          VoiceNoteStatus @default(PENDING)
+  processingError String?
+  savedNoteId     String?         // id of the SessionNote created on save
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+
+  session Session @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([sessionId])
+  @@index([userId])
+  @@map("voice_notes")
+}
+
+// ─────────────────────────────────────────────
+// PROGRESS SUMMARY
+// ─────────────────────────────────────────────
+
+model ProgressSummary {
+  id              String    @id @default(cuid())
+  userId          String
+  studentId       String
+  iepId           String?
+  periodLabel     String
+  periodStartDate DateTime
+  periodEndDate   DateTime
+  summaryText     String
+  goalSnapshots   Json?
+  isDraft         Boolean   @default(true)
+  finalizedAt     DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  student Student @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  iep     IEP?    @relation(fields: [iepId], references: [id], onDelete: SetNull)
+
+  @@index([studentId])
+  @@index([userId])
+  @@map("progress_summaries")
+}

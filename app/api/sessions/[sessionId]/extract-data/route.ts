@@ -1,0 +1,148 @@
+/**
+ * POST /api/sessions/[sessionId]/extract-data
+ *
+ * Uses Claude to extract structured clinical data from a free-text voice
+ * transcript, returning per-goal accuracy / trials / cueing level as well as
+ * session-level duration and participation.
+ *
+ * This is intentionally non-blocking — if it fails the UI degrades gracefully
+ * back to the regex-based extraction already present on the client.
+ *
+ * Body (JSON):
+ *   transcript : string
+ *   goals      : Array<{ id: string; name: string; domain: string }>
+ *
+ * Response (JSON):
+ *   extractions  : Record<goalId, { accuracy, trialsCorrect, trialsTotal, cueingLevel }>
+ *   duration     : number | null
+ *   participation: "excellent" | "good" | "fair" | "poor" | null
+ */
+
+import { NextRequest, NextResponse } from "next/server";
+import { requireUser } from "@/lib/auth/get-user";
+import Anthropic from "@anthropic-ai/sdk";
+
+const VALID_CUEING = [
+  "INDEPENDENT",
+  "GESTURAL",
+  "INDIRECT_VERBAL",
+  "DIRECT_VERBAL",
+  "MODELING",
+  "PHYSICAL",
+  "MAXIMUM_ASSISTANCE",
+] as const;
+
+function buildPrompt(transcript: string, goals: { id: string; name: string; domain: string }[]) {
+  const goalList = goals
+    .map((g) => `  - id: "${g.id}", name: "${g.name}", domain: ${g.domain}`)
+    .join("\n");
+
+  return `You are a clinical documentation assistant for a school-based speech-language pathologist.
+
+Extract structured data from the session transcript below.
+
+GOALS WORKED ON THIS SESSION:
+${goalList}
+
+TRANSCRIPT:
+"${transcript}"
+
+Return ONLY a JSON object in exactly this shape — no markdown, no explanation:
+{
+  "goals": [
+    {
+      "goalId": "<id from the list above>",
+      "accuracy": <integer 0–100 or null>,
+      "trialsCorrect": <integer or null>,
+      "trialsTotal": <integer or null>,
+      "cueingLevel": <"INDEPENDENT"|"GESTURAL"|"INDIRECT_VERBAL"|"DIRECT_VERBAL"|"MODELING"|"PHYSICAL"|"MAXIMUM_ASSISTANCE"|null>
+    }
+  ],
+  "duration": <integer minutes or null>,
+  "participation": <"excellent"|"good"|"fair"|"poor"|null>
+}
+
+EXTRACTION RULES:
+1. Only include goals that are explicitly discussed in the transcript. Omit goals not mentioned.
+2. For trials: "8/10", "8 out of 10", "8 correct out of 10" → trialsCorrect=8, trialsTotal=10, accuracy=80
+3. For percentages without trial counts: "80%" → accuracy=80, trialsCorrect=null, trialsTotal=null
+4. Cueing level mapping:
+   - "independently" / "no cues" / "on her own" → INDEPENDENT
+   - "minimal cues" / "min verbal" / "indirect verbal" → INDIRECT_VERBAL
+   - "moderate cues" / "mod verbal" / "direct verbal" → DIRECT_VERBAL
+   - "maximum support" / "max assist" / "hand-over-hand" → MAXIMUM_ASSISTANCE
+   - "gestural cue" / "gesture" → GESTURAL
+   - "modeling" / "model" → MODELING
+   - "physical guidance" / "physical prompt" → PHYSICAL
+5. Duration: look for "20-minute session", "worked for 30 minutes", etc.
+6. Participation: "great participation" / "very engaged" → excellent; "good effort" → good; "fair" → fair; "refused" / "difficult" → poor
+7. If a number is ambiguous between two goals, assign it to the goal whose name appears closest in the transcript.`;
+}
+
+export async function POST(
+  req: NextRequest,
+  { params }: { params: Promise<{ sessionId: string }> }
+) {
+  try {
+    await requireUser();
+    await params; // ensure route param is resolved
+
+    const apiKey = process.env.ANTHROPIC_API_KEY;
+    if (!apiKey) {
+      return NextResponse.json(
+        { extractions: {}, duration: null, participation: null },
+        { status: 200 }
+      );
+    }
+
+    const { transcript, goals } = await req.json();
+
+    if (!transcript?.trim() || !goals?.length) {
+      return NextResponse.json({ extractions: {}, duration: null, participation: null });
+    }
+
+    const client = new Anthropic({ apiKey });
+
+    const message = await client.messages.create({
+      model: process.env.LLM_NOTE_MODEL ?? "claude-haiku-4-5",
+      max_tokens: 1024,
+      messages: [{ role: "user", content: buildPrompt(transcript, goals) }],
+    });
+
+    const raw = message.content[0].type === "text" ? message.content[0].text.trim() : "";
+
+    // Pull out JSON even if the model accidentally wraps it in markdown
+    const jsonMatch = raw.match(/\{[\s\S]*\}/);
+    if (!jsonMatch) throw new Error("No JSON block in response");
+
+    const parsed = JSON.parse(jsonMatch[0]);
+
+    // Build a validated Record<goalId, ExtractionResult>
+    const extractions: Record<
+      string,
+      { accuracy: number | null; trialsCorrect: number | null; trialsTotal: number | null; cueingLevel: string | null }
+    > = {};
+
+    for (const g of parsed.goals ?? []) {
+      if (!g.goalId || typeof g.goalId !== "string") continue;
+      extractions[g.goalId] = {
+        accuracy:      typeof g.accuracy === "number"      ? Math.min(100, Math.max(0, g.accuracy)) : null,
+        trialsCorrect: typeof g.trialsCorrect === "number"  ? g.trialsCorrect : null,
+        trialsTotal:   typeof g.trialsTotal === "number"    ? g.trialsTotal   : null,
+        cueingLevel:   VALID_CUEING.includes(g.cueingLevel) ? g.cueingLevel  : null,
+      };
+    }
+
+    const validParticipation = ["excellent", "good", "fair", "poor"];
+
+    return NextResponse.json({
+      extractions,
+      duration:      typeof parsed.duration === "number" ? parsed.duration : null,
+      participation: validParticipation.includes(parsed.participation) ? parsed.participation : null,
+    });
+  } catch (err) {
+    console.error("[extract-data]", err);
+    // Non-fatal — client will fall back to regex extraction
+    return NextResponse.json({ extractions: {}, duration: null, participation: null });
+  }
+}
