@@ -30,6 +30,7 @@ import {
   Clock, MapPin, Users, CalendarDays, Bot, AlertTriangle,
   Target, CircleCheck, CircleDot,
   CircleAlert, Info, PlusCircle, RotateCcw, Pencil,
+  MessageSquare, X, Send, Sparkles, Volume2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -287,10 +288,12 @@ function VoiceCapture({
   sessionId,
   hasExistingContent,
   onTranscript,
+  onTalkToAI,
 }: {
   sessionId: string;
   hasExistingContent: boolean;
   onTranscript: (text: string, mode: TranscriptMode) => void;
+  onTalkToAI?: () => void;
 }) {
   const [state, setState] = useState<VoiceState>("idle");
   const [elapsed, setElapsed] = useState(0);
@@ -400,6 +403,18 @@ function VoiceCapture({
                 Add more information
               </Button>
             )}
+            {onTalkToAI && (
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                onClick={onTalkToAI}
+                className="gap-2 text-violet-600 border-violet-300 hover:bg-violet-50"
+              >
+                <MessageSquare className="h-3.5 w-3.5" />
+                Talk to AI
+              </Button>
+            )}
           </>
         )}
 
@@ -451,6 +466,18 @@ function VoiceCapture({
               <PlusCircle className="h-3.5 w-3.5" />
               Add more information
             </Button>
+            {onTalkToAI && (
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                onClick={onTalkToAI}
+                className="gap-2 text-violet-600 border-violet-300 hover:bg-violet-50"
+              >
+                <MessageSquare className="h-3.5 w-3.5" />
+                Talk to AI
+              </Button>
+            )}
           </>
         )}
       </div>
@@ -602,6 +629,433 @@ function EditableFieldRow({
             <Pencil className="h-3 w-3 text-muted-foreground opacity-0 group-hover/edit:opacity-60 transition-opacity shrink-0" />
           </button>
         )}
+      </div>
+    </div>
+  );
+}
+
+// ─── AiChatPanel ─────────────────────────────────────────────────────────────
+// Voice-first conversational assistant for session note documentation.
+// Primary flow: tap mic → speak → transcribe → AI asks next question (read aloud)
+// Text input available as fallback.
+
+interface AiChatMessage {
+  role: "user" | "assistant";
+  content: string;
+}
+
+interface AiChatGoal {
+  id: string;
+  name: string;
+  accuracy?: number | null;
+  trials?: string | null;
+  cueing?: string | null;
+}
+
+interface AiChatContext {
+  sessionDate: string;
+  sessionType: string;
+  durationMins?: number | null;
+  students: string[];
+  goals: AiChatGoal[];
+  missingLabels: string[];
+  currentNote: string;
+}
+
+type VoiceInterviewState = "idle" | "recording" | "transcribing" | "ai_thinking" | "speaking";
+
+function AiChatPanel({
+  sessionId,
+  context,
+  onClose,
+  onApplyNote,
+}: {
+  sessionId: string;
+  context: AiChatContext;
+  onClose: () => void;
+  onApplyNote: (note: string) => void;
+}) {
+  const [messages, setMessages] = useState<AiChatMessage[]>([]);
+  const [textInput, setTextInput] = useState("");
+  const [voiceState, setVoiceState] = useState<VoiceInterviewState>("idle");
+  const [pendingNoteUpdate, setPendingNoteUpdate] = useState<string | null>(null);
+  const [micError, setMicError] = useState<string | null>(null);
+
+  const initRef = useRef(false);
+  const bottomRef = useRef<HTMLDivElement>(null);
+  const textInputRef = useRef<HTMLTextAreaElement>(null);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const chunksRef = useRef<Blob[]>([]);
+  const streamRef = useRef<MediaStream | null>(null);
+
+  // Auto-scroll
+  useEffect(() => {
+    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages, voiceState]);
+
+  // Open with first AI question on mount
+  useEffect(() => {
+    if (!initRef.current) {
+      initRef.current = true;
+      sendToAI([], true);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Cleanup stream on unmount
+  useEffect(() => {
+    return () => {
+      streamRef.current?.getTracks().forEach((t) => t.stop());
+      window.speechSynthesis?.cancel();
+    };
+  }, []);
+
+  function speakText(text: string, onDone?: () => void) {
+    if (!window.speechSynthesis) {
+      onDone?.();
+      return;
+    }
+    window.speechSynthesis.cancel();
+    const utt = new SpeechSynthesisUtterance(text);
+    utt.rate = 1.0;
+    utt.pitch = 1.0;
+    utt.onend = () => {
+      setVoiceState("idle");
+      onDone?.();
+    };
+    utt.onerror = () => {
+      setVoiceState("idle");
+      onDone?.();
+    };
+    setVoiceState("speaking");
+    window.speechSynthesis.speak(utt);
+  }
+
+  async function sendToAI(history: AiChatMessage[], speakResponse = false) {
+    setVoiceState("ai_thinking");
+    try {
+      const res = await fetch(`/api/sessions/${sessionId}/chat`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ messages: history, context }),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error ?? "AI error");
+
+      const aiMsg: AiChatMessage = { role: "assistant", content: json.reply };
+      setMessages((prev) => [...prev, aiMsg]);
+
+      if (json.noteUpdate) {
+        setPendingNoteUpdate(json.noteUpdate);
+      }
+
+      if (speakResponse && json.reply) {
+        speakText(json.reply);
+      } else {
+        setVoiceState("idle");
+      }
+    } catch {
+      const errMsg: AiChatMessage = {
+        role: "assistant",
+        content: "Sorry, I had trouble connecting. Please try again.",
+      };
+      setMessages((prev) => [...prev, errMsg]);
+      setVoiceState("idle");
+    }
+  }
+
+  async function startRecording() {
+    setMicError(null);
+    window.speechSynthesis?.cancel();
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      streamRef.current = stream;
+      chunksRef.current = [];
+
+      // Pick a supported MIME type
+      const mimeType = MediaRecorder.isTypeSupported("audio/webm;codecs=opus")
+        ? "audio/webm;codecs=opus"
+        : MediaRecorder.isTypeSupported("audio/webm")
+        ? "audio/webm"
+        : "";
+
+      const recorder = new MediaRecorder(stream, mimeType ? { mimeType } : undefined);
+      mediaRecorderRef.current = recorder;
+
+      recorder.ondataavailable = (e) => {
+        if (e.data.size > 0) chunksRef.current.push(e.data);
+      };
+
+      recorder.onstop = async () => {
+        stream.getTracks().forEach((t) => t.stop());
+        streamRef.current = null;
+        const blob = new Blob(chunksRef.current, {
+          type: mimeType || "audio/webm",
+        });
+        await transcribeAndRespond(blob);
+      };
+
+      recorder.start(250);
+      setVoiceState("recording");
+    } catch {
+      setMicError("Microphone access denied. Use text input below.");
+      setVoiceState("idle");
+    }
+  }
+
+  function stopRecording() {
+    if (mediaRecorderRef.current?.state === "recording") {
+      mediaRecorderRef.current.stop();
+      setVoiceState("transcribing");
+    }
+  }
+
+  async function transcribeAndRespond(blob: Blob) {
+    setVoiceState("transcribing");
+    try {
+      const form = new FormData();
+      form.append("audio", blob, "recording.webm");
+      form.append("sessionId", sessionId);
+
+      const res = await fetch("/api/voice-notes/transcribe", {
+        method: "POST",
+        body: form,
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error ?? "Transcription failed");
+
+      const transcript: string = json.transcript ?? json.text ?? "";
+      if (!transcript.trim()) {
+        setVoiceState("idle");
+        return;
+      }
+
+      submitUserMessage(transcript, true);
+    } catch {
+      setMicError("Transcription failed. Please try again or use text input.");
+      setVoiceState("idle");
+    }
+  }
+
+  function submitUserMessage(text: string, speakResponse = false) {
+    const trimmed = text.trim();
+    if (!trimmed) return;
+
+    const userMsg: AiChatMessage = { role: "user", content: trimmed };
+    const newHistory = [...messages, userMsg];
+    setMessages(newHistory);
+    setTextInput("");
+    setPendingNoteUpdate(null);
+    sendToAI(newHistory, speakResponse);
+  }
+
+  function handleTextSend() {
+    submitUserMessage(textInput, false);
+  }
+
+  function handleKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
+      handleTextSend();
+    }
+  }
+
+  function applyNote() {
+    if (pendingNoteUpdate) {
+      onApplyNote(pendingNoteUpdate);
+      setPendingNoteUpdate(null);
+      const confirmMsg: AiChatMessage = {
+        role: "assistant",
+        content: "Note updated. Is there anything else you'd like to add or clarify?",
+      };
+      setMessages((prev) => [...prev, confirmMsg]);
+    }
+  }
+
+  const isProcessing =
+    voiceState === "transcribing" || voiceState === "ai_thinking";
+
+  const voiceStateLabel: Record<VoiceInterviewState, string> = {
+    idle: "Tap to speak",
+    recording: "Recording… tap to stop",
+    transcribing: "Transcribing…",
+    ai_thinking: "AI is thinking…",
+    speaking: "AI is speaking…",
+  };
+
+  return (
+    <div className="rounded-lg border border-violet-200 bg-violet-50/40 overflow-hidden">
+      {/* Header */}
+      <div className="flex items-center justify-between px-3.5 py-2.5 bg-violet-100/60 border-b border-violet-200">
+        <div className="flex items-center gap-2">
+          <div className="flex items-center justify-center h-5 w-5 rounded bg-violet-600/10">
+            <Bot className="h-3.5 w-3.5 text-violet-600" />
+          </div>
+          <span className="text-xs font-semibold text-violet-800">AI Voice Interview</span>
+        </div>
+        <button
+          type="button"
+          onClick={() => {
+            window.speechSynthesis?.cancel();
+            onClose();
+          }}
+          className="text-violet-400 hover:text-violet-700 transition-colors"
+          aria-label="Close AI interview"
+        >
+          <X className="h-4 w-4" />
+        </button>
+      </div>
+
+      {/* Conversation transcript */}
+      <div className="max-h-52 overflow-y-auto px-3.5 py-3 space-y-2.5">
+        {messages.length === 0 && voiceState === "ai_thinking" && (
+          <div className="flex items-center gap-2 text-xs text-muted-foreground">
+            <Loader2 className="h-3.5 w-3.5 animate-spin text-violet-500" />
+            Preparing your first question…
+          </div>
+        )}
+
+        {messages.map((msg, i) => (
+          <div
+            key={i}
+            className={cn(
+              "flex gap-2",
+              msg.role === "user" ? "justify-end" : "justify-start"
+            )}
+          >
+            {msg.role === "assistant" && (
+              <div className="shrink-0 h-5 w-5 rounded bg-violet-100 flex items-center justify-center mt-0.5">
+                <Bot className="h-3 w-3 text-violet-600" />
+              </div>
+            )}
+            <div
+              className={cn(
+                "max-w-[85%] rounded-xl px-3 py-2 text-xs leading-relaxed",
+                msg.role === "user"
+                  ? "bg-primary text-primary-foreground rounded-br-sm"
+                  : "bg-white border border-violet-100 text-foreground rounded-bl-sm shadow-sm"
+              )}
+            >
+              {msg.content}
+            </div>
+          </div>
+        ))}
+
+        {(voiceState === "ai_thinking" && messages.length > 0) && (
+          <div className="flex items-center gap-2">
+            <div className="h-5 w-5 rounded bg-violet-100 flex items-center justify-center">
+              <Bot className="h-3 w-3 text-violet-600" />
+            </div>
+            <div className="bg-white border border-violet-100 rounded-xl rounded-bl-sm px-3 py-2 shadow-sm">
+              <span className="flex gap-1">
+                <span className="h-1.5 w-1.5 rounded-full bg-violet-400 animate-bounce [animation-delay:-0.3s]" />
+                <span className="h-1.5 w-1.5 rounded-full bg-violet-400 animate-bounce [animation-delay:-0.15s]" />
+                <span className="h-1.5 w-1.5 rounded-full bg-violet-400 animate-bounce" />
+              </span>
+            </div>
+          </div>
+        )}
+
+        <div ref={bottomRef} />
+      </div>
+
+      {/* Note update suggestion */}
+      {pendingNoteUpdate && (
+        <div className="mx-3.5 mb-3 rounded-lg border border-violet-200 bg-white p-3 space-y-2">
+          <div className="flex items-center gap-1.5 text-xs font-semibold text-violet-700">
+            <Sparkles className="h-3.5 w-3.5" />
+            Suggested note update
+          </div>
+          <p className="text-xs text-muted-foreground leading-relaxed line-clamp-3">
+            {pendingNoteUpdate}
+          </p>
+          <div className="flex gap-2">
+            <Button
+              type="button"
+              size="sm"
+              className="h-7 text-xs gap-1.5 bg-violet-600 hover:bg-violet-700"
+              onClick={applyNote}
+            >
+              <Check className="h-3 w-3" />
+              Apply to note
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              variant="ghost"
+              className="h-7 text-xs text-muted-foreground"
+              onClick={() => setPendingNoteUpdate(null)}
+            >
+              Dismiss
+            </Button>
+          </div>
+        </div>
+      )}
+
+      {/* Voice CTA */}
+      <div className="border-t border-violet-200 bg-white px-3.5 py-4 flex flex-col items-center gap-3">
+        {micError && (
+          <p className="text-xs text-destructive text-center">{micError}</p>
+        )}
+
+        {/* Big mic / status button */}
+        <div className="flex flex-col items-center gap-1.5">
+          <button
+            type="button"
+            disabled={isProcessing}
+            onClick={voiceState === "recording" ? stopRecording : startRecording}
+            aria-label={voiceState === "recording" ? "Stop recording" : "Start recording"}
+            className={cn(
+              "relative flex items-center justify-center rounded-full transition-all duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-violet-400",
+              voiceState === "recording"
+                ? "h-16 w-16 bg-red-500 hover:bg-red-600 shadow-lg shadow-red-200"
+                : voiceState === "speaking"
+                ? "h-16 w-16 bg-violet-200 cursor-default"
+                : isProcessing
+                ? "h-16 w-16 bg-violet-100 cursor-wait"
+                : "h-16 w-16 bg-violet-600 hover:bg-violet-700 shadow-md shadow-violet-200"
+            )}
+          >
+            {voiceState === "recording" && (
+              <span className="absolute inset-0 rounded-full bg-red-400 animate-ping opacity-40" />
+            )}
+            {isProcessing ? (
+              <Loader2 className="h-7 w-7 text-violet-500 animate-spin" />
+            ) : voiceState === "speaking" ? (
+              <Volume2 className="h-7 w-7 text-violet-500" />
+            ) : voiceState === "recording" ? (
+              <Square className="h-6 w-6 text-white fill-white" />
+            ) : (
+              <Mic className="h-7 w-7 text-white" />
+            )}
+          </button>
+          <span className="text-[11px] text-muted-foreground font-medium">
+            {voiceStateLabel[voiceState]}
+          </span>
+        </div>
+
+        {/* Text fallback */}
+        <div className="w-full flex gap-2 items-end">
+          <textarea
+            ref={textInputRef}
+            value={textInput}
+            onChange={(e) => setTextInput(e.target.value)}
+            onKeyDown={handleKeyDown}
+            placeholder="Or type your response… (Enter to send)"
+            rows={2}
+            disabled={isProcessing || voiceState === "recording"}
+            className="flex-1 resize-none text-xs rounded-md border border-input bg-background px-2.5 py-2 focus:outline-none focus:ring-1 focus:ring-violet-400 disabled:opacity-40"
+          />
+          <Button
+            type="button"
+            size="icon"
+            disabled={isProcessing || voiceState === "recording" || !textInput.trim()}
+            onClick={handleTextSend}
+            className="h-8 w-8 shrink-0 bg-violet-600 hover:bg-violet-700"
+          >
+            <Send className="h-3.5 w-3.5" />
+          </Button>
+        </div>
       </div>
     </div>
   );
@@ -820,6 +1274,9 @@ export function SessionNotePage({
       toast.error("Failed to save goal data");
     }
   }
+
+  // ── AI Chat ───────────────────────────────────────────────────────────────────
+  const [showAiChat, setShowAiChat] = useState(false);
 
   // ── Note draft (continued) ───────────────────────────────────────────────────
   const [generating, setGenerating] = useState(false);
@@ -1084,7 +1541,39 @@ export function SessionNotePage({
                 sessionId={sessionId}
                 hasExistingContent={!!noteDraft.trim()}
                 onTranscript={handleVoiceTranscript}
+                onTalkToAI={() => setShowAiChat(true)}
               />
+
+              {/* AI Chat Panel */}
+              {showAiChat && (
+                <AiChatPanel
+                  sessionId={sessionId}
+                  context={{
+                    sessionDate: format(new Date(sessionDate), "MMM d, yyyy"),
+                    sessionType: SESSION_TYPE_LABELS[sessionType] ?? sessionType,
+                    durationMins: effectiveDuration,
+                    students: students.map((s) => `${s.firstName} ${s.lastName}`),
+                    goals: matchedGoals.map((mg) => {
+                      const aiExt  = aiExtractions[mg.goal.id];
+                      const ovride = goalOverrides[mg.goal.id];
+                      return {
+                        id: mg.goal.id,
+                        name: mg.goal.shortName ?? mg.goal.goalText.slice(0, 50),
+                        accuracy: goalEffectiveAccuracy(mg, aiExt, ovride),
+                        trials: goalEffectiveTrials(mg, aiExt, ovride),
+                        cueing: goalEffectiveCueing(mg, aiExt, ovride),
+                      };
+                    }),
+                    missingLabels,
+                    currentNote: noteDraft,
+                  }}
+                  onClose={() => setShowAiChat(false)}
+                  onApplyNote={(note) => {
+                    handleNoteChange(note);
+                    toast.success("Note updated from AI conversation");
+                  }}
+                />
+              )}
 
               {/* Regenerate button — only shown once there is something to work with */}
               {(summaryContext.trim() || noteDraft.trim()) && (
