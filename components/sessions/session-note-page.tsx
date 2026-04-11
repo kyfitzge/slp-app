@@ -1235,13 +1235,26 @@ export function SessionNotePage({
    * - No context at all: show goals that already have saved data points.
    */
   const matchedGoals = useMemo<MatchedGoalData[]>(() => {
+    // Match goals from ALL available text sources — transcript, note draft, and extraction context
+    const fromTranscript = summaryContext.trim()
+      ? matchGoalsFromTranscript(summaryContext, allGoals) : [];
+    const fromNote = noteDraft.trim()
+      ? matchGoalsFromTranscript(noteDraft, allGoals) : [];
+    const fromExtraction = noteExtractionContext.trim()
+      ? matchGoalsFromTranscript(noteExtractionContext, allGoals) : [];
+
+    const matchedIds = new Set([
+      ...fromTranscript.map((g) => g.id),
+      ...fromNote.map((g) => g.id),
+      ...fromExtraction.map((g) => g.id),
+    ]);
+    const allMatched = allGoals.filter((g) => matchedIds.has(g.id));
+
     let goals: Goal[];
-    if (summaryContext.trim()) {
-      // Voice recording present — keyword-match to focus on mentioned goals
-      const matched = matchGoalsFromTranscript(summaryContext, allGoals);
-      goals = matched.length > 0 ? matched : allGoals.filter((g) => !!initialGoalData[g.id]);
-    } else if (noteExtractionContext.trim()) {
-      // Typed note — show every goal so the SLP can fill in data for any of them
+    if (allMatched.length > 0) {
+      goals = allMatched;
+    } else if (summaryContext.trim() || noteDraft.trim() || noteExtractionContext.trim()) {
+      // Content exists but no keyword matches — show all goals so none are missed
       goals = allGoals;
     } else {
       // Nothing yet — show goals that already have saved data
@@ -1418,6 +1431,7 @@ export function SessionNotePage({
       if (!res.ok) throw new Error(json.error ?? "Generation failed");
       const draft: string = json.draftNote;
       setNoteDraft(draft);
+      setNoteExtractionContext(draft);
       setGeneratedAt(new Date());
       setHasUnsavedChanges(true);
       toast.success("Note generated");
