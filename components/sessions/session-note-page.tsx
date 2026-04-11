@@ -1390,6 +1390,7 @@ export function SessionNotePage({
   const [generatedAt, setGeneratedAt] = useState<Date | null>(
     initialNote ? new Date() : null
   );
+  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   const noteDebouncRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   async function generateNote(contextOverride?: string) {
@@ -1446,7 +1447,7 @@ export function SessionNotePage({
       const draft: string = json.draftNote;
       setNoteDraft(draft);
       setGeneratedAt(new Date());
-      await persistNote(draft);
+      setHasUnsavedChanges(true);
       toast.success("Note generated");
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Failed to generate note");
@@ -1455,7 +1456,7 @@ export function SessionNotePage({
     }
   }
 
-  /** Persist the note draft to the DB (debounce-safe). */
+  /** Persist the note draft to the DB. */
   async function persistNote(note: string) {
     if (!note.trim()) return;
     setNoteStatus("saving");
@@ -1467,6 +1468,7 @@ export function SessionNotePage({
       });
       if (!res.ok) throw new Error();
       setNoteStatus("saved");
+      setHasUnsavedChanges(false);
       setTimeout(() => setNoteStatus("idle"), 2500);
     } catch {
       setNoteStatus("idle");
@@ -1476,15 +1478,15 @@ export function SessionNotePage({
   function handleNoteChange(text: string) {
     setNoteDraft(text);
     setNoteStatus("idle");
+    setHasUnsavedChanges(true);
     // Update regex extraction context immediately from typed text
     // (only when there is no voice transcript — voice always takes priority)
     if (!summaryContext.trim()) {
       setNoteExtractionContext(text);
     }
+    // Run AI extraction with debounce (local state only — no DB save)
     if (noteDebouncRef.current) clearTimeout(noteDebouncRef.current);
     noteDebouncRef.current = setTimeout(() => {
-      persistNote(text);
-      // Run AI extraction against typed note if no voice context exists
       if (!summaryContext.trim() && text.trim().length > 40) {
         extractStructuredData(text);
       }
@@ -1951,14 +1953,24 @@ export function SessionNotePage({
           ACTION BAR
       ══════════════════════════════════════════════════════ */}
       {completed ? (
-        <div className="flex items-center gap-3 rounded-xl border border-green-200 bg-green-50 px-5 py-4">
-          <div className="flex items-center justify-center h-8 w-8 rounded-full bg-green-100 shrink-0">
-            <Check className="h-4 w-4 text-green-600" />
+        <div className="flex items-center justify-between gap-3 rounded-xl border border-green-200 bg-green-50 px-5 py-4">
+          <div className="flex items-center gap-3">
+            <div className="flex items-center justify-center h-8 w-8 rounded-full bg-green-100 shrink-0">
+              <Check className="h-4 w-4 text-green-600" />
+            </div>
+            <div>
+              <p className="text-sm font-semibold text-green-800">Documentation complete</p>
+              <p className="text-xs text-green-700">Note saved to this session.</p>
+            </div>
           </div>
-          <div>
-            <p className="text-sm font-semibold text-green-800">Documentation complete</p>
-            <p className="text-xs text-green-700">Note saved to this session.</p>
-          </div>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setCompleted(false)}
+            className="shrink-0 text-xs border-green-300 text-green-800 hover:bg-green-100"
+          >
+            Mark Incomplete
+          </Button>
         </div>
       ) : (
         <div className="rounded-xl border bg-card px-5 py-4">
@@ -1972,15 +1984,20 @@ export function SessionNotePage({
               )}
               {noteStatus === "saving" && (
                 <p className="text-xs text-muted-foreground flex items-center gap-1.5">
-                  <Loader2 className="h-3 w-3 animate-spin" /> Auto-saving…
+                  <Loader2 className="h-3 w-3 animate-spin" /> Saving…
                 </p>
               )}
               {noteStatus === "saved" && (
                 <p className="text-xs text-green-600 flex items-center gap-1.5">
-                  <Check className="h-3 w-3" /> Draft saved
+                  <Check className="h-3 w-3" /> Saved
                 </p>
               )}
-              {noteStatus === "idle" && allFieldsCaptured && noteDraft && (
+              {noteStatus === "idle" && hasUnsavedChanges && noteDraft && (
+                <p className="text-xs text-amber-600 flex items-center gap-1.5">
+                  <CircleDot className="h-3 w-3" /> Unsaved changes
+                </p>
+              )}
+              {noteStatus === "idle" && !hasUnsavedChanges && allFieldsCaptured && noteDraft && (
                 <p className="text-xs text-muted-foreground">Ready to complete documentation</p>
               )}
             </div>
@@ -1992,13 +2009,13 @@ export function SessionNotePage({
                   if (!noteDraft.trim()) return;
                   try {
                     await persistNote(noteDraft);
-                    toast.success("Progress saved");
+                    toast.success("Note saved");
                   } catch {
                     toast.error("Failed to save");
                   }
                 }}
               >
-                Save Progress
+                Save
               </Button>
               <Button
                 size="sm"
