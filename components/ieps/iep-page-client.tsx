@@ -162,10 +162,14 @@ function IEPTextChatPanel({
   async function sendToAI(history: ChatMessage[]) {
     setIsThinking(true);
     try {
+      // Strip UI-only "kind: update" notifications — they're not real conversation
+      // turns and would create consecutive assistant messages, breaking the API.
+      const apiHistory = history.filter((m) => m.kind !== "update");
+
       const res = await fetch(`/api/ieps/${iepId}/chat`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ messages: history, context: buildContext() }),
+        body: JSON.stringify({ messages: apiHistory, context: buildContext() }),
       });
       const json = await res.json();
       if (!res.ok) throw new Error(json.error ?? "AI error");
@@ -559,10 +563,13 @@ function IEPVoiceChatPanel({
   async function sendToAI(history: ChatMessage[], speakResponse: boolean) {
     setVoiceState("ai_thinking");
     try {
+      // Strip UI-only "kind: update" notifications before sending to API
+      const apiHistory = history.filter((m) => m.kind !== "update");
+
       const res = await fetch(`/api/ieps/${iepId}/chat`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ messages: history, context: buildContext() }),
+        body: JSON.stringify({ messages: apiHistory, context: buildContext() }),
       });
       const json = await res.json();
       if (!res.ok) throw new Error(json.error ?? "AI error");
