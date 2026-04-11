@@ -83,7 +83,7 @@ export default async function IEPPage({
       <IEPForm studentId={studentId} iepId={iepId} defaultValues={defaultValues} />
 
       {/* ── Goals ───────────────────────────────────────────────────────── */}
-      <div className="max-w-2xl space-y-3">
+      <div className="space-y-3">
         <div className="flex items-center justify-between">
           <div>
             <h3 className="text-sm font-semibold">Goals</h3>

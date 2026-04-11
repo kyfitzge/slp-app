@@ -170,7 +170,7 @@ export function IEPForm({ studentId, iepId, defaultValues }: IEPFormProps) {
   }
 
   return (
-    <form onSubmit={handleSubmit(onSubmit)} className="max-w-2xl space-y-8">
+    <form onSubmit={handleSubmit(onSubmit)} className="space-y-8">
       <input type="hidden" {...register("studentId")} value={studentId} />
 
       {/* ── Status + Dates ───────────────────────────────────────────────── */}
