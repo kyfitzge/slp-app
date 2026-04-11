@@ -1162,7 +1162,9 @@ function TextChatPanel({
   const textInputRef = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+    if (messages.length > 0) {
+      bottomRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    }
   }, [messages, isThinking]);
 
   // Kick off the first AI question on mount
