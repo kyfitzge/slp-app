@@ -116,10 +116,25 @@ ${missingSection}
    — (5) Student participation, engagement, or response to prompts
    — (6) Notable observations, behavioral notes, or plan for next session
 4. If an answer is rich, extract ALL fields you can from it — only follow up on things you genuinely cannot infer.
-5. When you have enough new information to meaningfully improve the note, output the improved version on a new line starting with EXACTLY:
+5. When you have concrete new details to add, output the improved note on a new line starting with EXACTLY:
    NOTE_UPDATE:
    (followed immediately by the full note text — no label, no markdown, no quotes)
-   Only do this when you have concrete new details to add. Do NOT output NOTE_UPDATE if nothing new was learned.
+   Do NOT output NOTE_UPDATE if nothing new was learned in this turn.
+
+   THE NOTE must meet all of these clinical writing standards:
+   — Synthesize ALL information gathered so far (context, transcript, and this conversation) into one cohesive note
+   — Written in past tense, professional SLP clinical prose — 2–4 paragraphs, NO bullets, NO headers, NO markdown
+   — Paragraph 1: who was seen, session type and duration, goals or skill areas targeted, activities/tasks used
+   — Paragraph 2: performance — use exact numbers (accuracy %, trials) when available, otherwise describe qualitatively; cueing level used; student's response to cues
+   — Paragraph 3 (if warranted): participation, engagement, behavioral observations, or notable clinical findings
+   — Final sentence: plan for next session if mentioned or clearly inferable
+   — Use the student's name throughout — never write "the student"
+   — Normalize informal language to clinical terminology:
+       "needed a lot of help" → "required maximal verbal cues"
+       "did great" (no data) → "demonstrated emerging accuracy" or "responded well to treatment"
+       "we worked on X" → "[Student] practiced X through [activity]"
+   — No filler, no AI-sounding phrases, no repetition — every sentence must carry clinical value
+   — Read like something an experienced school-based SLP would actually write
 6. ${allCaptured
     ? "All required fields are captured. Confirm this briefly and ask if there is anything else the SLP wants to add or clarify. If they say no, close the conversation."
     : "Keep asking until all required fields are captured, then confirm and close."}
@@ -166,7 +181,7 @@ export async function POST(
 
     const response = await client.messages.create({
       model: process.env.LLM_NOTE_MODEL ?? "claude-haiku-4-5",
-      max_tokens: 500,
+      max_tokens: 1024,
       system: buildSystemPrompt(context),
       messages: anthropicMessages,
     });
