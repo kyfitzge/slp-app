@@ -14,6 +14,7 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 import { format, addYears } from "date-fns";
+import { cn } from "@/lib/utils";
 
 // ─── PLAAFP helpers ────────────────────────────────────────────────────────────
 
@@ -94,19 +95,50 @@ function composePLAAFP(state: PLAAFPState): string {
     .join("\n\n");
 }
 
-// ─── Small helpers ─────────────────────────────────────────────────────────────
+// ─── Layout helpers ────────────────────────────────────────────────────────────
 
-function SectionLabel({ children }: { children: React.ReactNode }) {
+function SectionCard({
+  title,
+  children,
+  className,
+}: {
+  title: string;
+  children: React.ReactNode;
+  className?: string;
+}) {
   return (
-    <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground mb-3">
-      {children}
-    </p>
+    <div className={cn("rounded-xl border bg-card shadow-sm overflow-hidden", className)}>
+      <div className="px-5 py-3.5 border-b bg-muted/20">
+        <h3 className="text-sm font-semibold text-foreground">{title}</h3>
+      </div>
+      <div className="p-5">{children}</div>
+    </div>
   );
 }
 
-function FieldError({ message }: { message?: string }) {
-  if (!message) return null;
-  return <p className="text-xs text-destructive mt-1">{message}</p>;
+function Field({
+  label,
+  required,
+  error,
+  children,
+  className,
+}: {
+  label: string;
+  required?: boolean;
+  error?: string;
+  children: React.ReactNode;
+  className?: string;
+}) {
+  return (
+    <div className={className}>
+      <Label className="mb-1.5 block text-sm font-medium text-muted-foreground">
+        {label}
+        {required && <span className="text-destructive ml-0.5">*</span>}
+      </Label>
+      {children}
+      {error && <p className="text-xs text-destructive mt-1">{error}</p>}
+    </div>
+  );
 }
 
 // ─── Main form ─────────────────────────────────────────────────────────────────
@@ -170,158 +202,132 @@ export function IEPForm({ studentId, iepId, defaultValues }: IEPFormProps) {
   }
 
   return (
-    <form onSubmit={handleSubmit(onSubmit)} className="space-y-8">
+    <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
       <input type="hidden" {...register("studentId")} value={studentId} />
 
-      {/* ── Status + Dates ───────────────────────────────────────────────── */}
-      <div className="space-y-4">
-        <SectionLabel>Status &amp; Dates</SectionLabel>
+      {/* ── Status & Dates ───────────────────────────────────────────────── */}
+      <SectionCard title="Status & Dates">
+        <div className="space-y-4">
+          {/* Status */}
+          <Field label="Status">
+            <Select
+              defaultValue={defaultValues?.status ?? "DRAFT"}
+              onValueChange={(v) => setValue("status", v as CreateIEPInput["status"])}
+            >
+              <SelectTrigger id="status" className="max-w-[200px]">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="DRAFT">Draft</SelectItem>
+                <SelectItem value="ACTIVE">Active</SelectItem>
+                <SelectItem value="IN_REVIEW">In Review</SelectItem>
+                <SelectItem value="EXPIRED">Expired</SelectItem>
+                <SelectItem value="DISCONTINUED">Discontinued</SelectItem>
+              </SelectContent>
+            </Select>
+          </Field>
 
-        {/* Status */}
-        <div className="max-w-[180px]">
-          <Label htmlFor="status" className="mb-1.5 block text-sm">Status</Label>
-          <Select
-            defaultValue={defaultValues?.status ?? "DRAFT"}
-            onValueChange={(v) => setValue("status", v as CreateIEPInput["status"])}
-          >
-            <SelectTrigger id="status">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="DRAFT">Draft</SelectItem>
-              <SelectItem value="ACTIVE">Active</SelectItem>
-              <SelectItem value="IN_REVIEW">In Review</SelectItem>
-              <SelectItem value="EXPIRED">Expired</SelectItem>
-              <SelectItem value="DISCONTINUED">Discontinued</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
-
-        {/* Dates — 2-column grid */}
-        <div className="grid grid-cols-2 gap-x-6 gap-y-4">
-          <div>
-            <Label htmlFor="effectiveDate" className="mb-1.5 block text-sm">
-              Effective date <span className="text-destructive">*</span>
-            </Label>
-            <Input id="effectiveDate" type="date" {...register("effectiveDate")} />
-            <FieldError message={errors.effectiveDate?.message} />
-          </div>
-          <div>
-            <Label htmlFor="reviewDate" className="mb-1.5 block text-sm">
-              Annual review date <span className="text-destructive">*</span>
-            </Label>
-            <Input id="reviewDate" type="date" {...register("reviewDate")} />
-            <FieldError message={errors.reviewDate?.message} />
-          </div>
-          <div>
-            <Label htmlFor="expirationDate" className="mb-1.5 block text-sm">
-              Expiration date <span className="text-destructive">*</span>
-            </Label>
-            <Input id="expirationDate" type="date" {...register("expirationDate")} />
-            <FieldError message={errors.expirationDate?.message} />
-          </div>
-          <div>
-            <Label htmlFor="meetingDate" className="mb-1.5 block text-sm">
-              IEP meeting date
-            </Label>
-            <Input id="meetingDate" type="date" {...register("meetingDate")} />
-          </div>
-          <div>
-            <Label htmlFor="nextEvalDate" className="mb-1.5 block text-sm">
-              Next evaluation date
-            </Label>
-            <Input id="nextEvalDate" type="date" {...register("nextEvalDate")} />
+          {/* Dates — 3-column grid */}
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
+            <Field label="Effective date" required error={errors.effectiveDate?.message}>
+              <Input id="effectiveDate" type="date" {...register("effectiveDate")} />
+            </Field>
+            <Field label="Annual review date" required error={errors.reviewDate?.message}>
+              <Input id="reviewDate" type="date" {...register("reviewDate")} />
+            </Field>
+            <Field label="Expiration date" required error={errors.expirationDate?.message}>
+              <Input id="expirationDate" type="date" {...register("expirationDate")} />
+            </Field>
+            <Field label="IEP meeting date">
+              <Input id="meetingDate" type="date" {...register("meetingDate")} />
+            </Field>
+            <Field label="Next evaluation date">
+              <Input id="nextEvalDate" type="date" {...register("nextEvalDate")} />
+            </Field>
           </div>
         </div>
-      </div>
+      </SectionCard>
 
       {/* ── Services ─────────────────────────────────────────────────────── */}
-      <div className="space-y-4 border-t pt-8">
-        <SectionLabel>Services</SectionLabel>
-        <div className="grid grid-cols-3 gap-4">
-          <div>
-            <Label htmlFor="minutesPerWeek" className="mb-1.5 block text-sm">Total min/week</Label>
-            <Input id="minutesPerWeek" type="number" min={0} placeholder="60" {...register("minutesPerWeek")} />
+      <SectionCard title="Speech-Language Services">
+        <div className="space-y-4">
+          <div className="grid grid-cols-3 gap-4">
+            <Field label="Total min / week">
+              <Input id="minutesPerWeek" type="number" min={0} placeholder="60" {...register("minutesPerWeek")} />
+            </Field>
+            <Field label="Individual min / week">
+              <Input id="individualMinutes" type="number" min={0} placeholder="30" {...register("individualMinutes")} />
+            </Field>
+            <Field label="Group min / week">
+              <Input id="groupMinutes" type="number" min={0} placeholder="30" {...register("groupMinutes")} />
+            </Field>
           </div>
-          <div>
-            <Label htmlFor="individualMinutes" className="mb-1.5 block text-sm">Individual min/week</Label>
-            <Input id="individualMinutes" type="number" min={0} placeholder="30" {...register("individualMinutes")} />
-          </div>
-          <div>
-            <Label htmlFor="groupMinutes" className="mb-1.5 block text-sm">Group min/week</Label>
-            <Input id="groupMinutes" type="number" min={0} placeholder="30" {...register("groupMinutes")} />
-          </div>
+          <Field label="Service location">
+            <Input
+              id="serviceLocation"
+              placeholder="e.g. Pull-out resource room, general education classroom"
+              {...register("serviceLocation")}
+            />
+          </Field>
         </div>
-        <div>
-          <Label htmlFor="serviceLocation" className="mb-1.5 block text-sm">Service location</Label>
-          <Input
-            id="serviceLocation"
-            placeholder="e.g. Pull-out resource room, general education classroom"
-            {...register("serviceLocation")}
-          />
-        </div>
-      </div>
+      </SectionCard>
 
       {/* ── Present Levels (PLAAFP) ───────────────────────────────────────── */}
-      <div className="space-y-5 border-t pt-8">
-        <SectionLabel>Present Levels (PLAAFP)</SectionLabel>
-        {PLAAFP_SECTIONS.map(({ key, heading, placeholder }) => (
-          <div key={key}>
-            <Label className="mb-1.5 block text-sm">{heading}</Label>
-            <Textarea
-              value={plaafp[key]}
-              onChange={(e) => setPlaafp((prev) => ({ ...prev, [key]: e.target.value }))}
-              placeholder={placeholder}
-              rows={3}
-              className="text-sm resize-y"
-            />
-          </div>
-        ))}
-      </div>
+      <SectionCard title="Present Levels of Academic Achievement & Functional Performance (PLAAFP)">
+        <div className="space-y-4">
+          {PLAAFP_SECTIONS.map(({ key, heading, placeholder }) => (
+            <Field key={key} label={heading}>
+              <Textarea
+                value={plaafp[key]}
+                onChange={(e) => setPlaafp((prev) => ({ ...prev, [key]: e.target.value }))}
+                placeholder={placeholder}
+                rows={3}
+                className="text-sm resize-y"
+              />
+            </Field>
+          ))}
+        </div>
+      </SectionCard>
 
       {/* ── Parent & Guardian Input ───────────────────────────────────────── */}
-      <div className="space-y-3 border-t pt-8">
-        <SectionLabel>Parent &amp; Guardian Input</SectionLabel>
+      <SectionCard title="Parent & Guardian Input">
         <Textarea
           {...register("parentConcerns")}
           placeholder="Concerns, priorities, and questions raised by parents or guardians…"
           rows={3}
           className="text-sm resize-y"
         />
-      </div>
+      </SectionCard>
 
       {/* ── Transition Notes (optional) ──────────────────────────────────── */}
-      <div className="border-t pt-8">
-        {!showTransition ? (
+      {!showTransition ? (
+        <button
+          type="button"
+          onClick={() => setShowTransition(true)}
+          className="text-xs text-muted-foreground hover:text-foreground underline underline-offset-2 transition-colors"
+        >
+          + Add transition notes (age 16+)
+        </button>
+      ) : (
+        <SectionCard title="Transition Notes">
+          <Textarea
+            {...register("transitionNotes")}
+            placeholder="Post-secondary goals, vocational planning, agency involvement…"
+            rows={3}
+            className="text-sm resize-y"
+          />
           <button
             type="button"
-            onClick={() => setShowTransition(true)}
-            className="text-xs text-muted-foreground hover:text-foreground underline underline-offset-2 transition-colors"
+            onClick={() => setShowTransition(false)}
+            className="mt-3 text-xs text-muted-foreground hover:text-foreground underline underline-offset-2 transition-colors"
           >
-            + Add transition notes (age 16+)
+            Remove transition notes
           </button>
-        ) : (
-          <div className="space-y-3">
-            <SectionLabel>Transition Notes</SectionLabel>
-            <Textarea
-              {...register("transitionNotes")}
-              placeholder="Post-secondary goals, vocational planning, agency involvement…"
-              rows={3}
-              className="text-sm resize-y"
-            />
-            <button
-              type="button"
-              onClick={() => setShowTransition(false)}
-              className="text-xs text-muted-foreground hover:text-foreground underline underline-offset-2 transition-colors"
-            >
-              Remove transition notes
-            </button>
-          </div>
-        )}
-      </div>
+        </SectionCard>
+      )}
 
       {/* ── Submit ───────────────────────────────────────────────────────── */}
-      <div className="flex gap-3 border-t pt-6">
+      <div className="flex gap-3 pt-2">
         <Button type="submit" disabled={isSubmitting}>
           {isSubmitting ? "Saving…" : isEditing ? "Save Changes" : "Create IEP"}
         </Button>
