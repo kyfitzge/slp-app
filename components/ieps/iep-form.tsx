@@ -190,8 +190,11 @@ export function IEPForm({ studentId, iepId, defaultValues, plaafp: plaafpProp, o
     handleSubmit,
     setValue,
     formState: { errors, isSubmitting },
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
   } = useForm<CreateIEPInput>({
-    resolver: zodResolver(createIEPSchema),
+    // z.coerce fields cause a Resolver<input> vs Resolver<output> mismatch;
+    // cast to any so the build doesn't fail — runtime behaviour is unaffected.
+    resolver: zodResolver(createIEPSchema) as any, // eslint-disable-line @typescript-eslint/no-explicit-any
     defaultValues: {
       studentId,
       status: "DRAFT",
@@ -202,6 +205,7 @@ export function IEPForm({ studentId, iepId, defaultValues, plaafp: plaafpProp, o
     },
   });
 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   async function onSubmit(data: CreateIEPInput) {
     try {
       const composed = composePLAAFP(plaafp);
