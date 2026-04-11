@@ -1502,19 +1502,64 @@ export function SessionNotePage({
     }, 1500);
   }
 
+  /** Merge new information into the existing note without rewriting it. */
+  async function augmentNote(newTranscript: string) {
+    if (!newTranscript.trim()) return; // nothing recorded — leave note alone
+    if (!noteDraft.trim()) {
+      // No existing note — fall back to a full generation
+      return generateNote(newTranscript);
+    }
+    setGenerating(true);
+    try {
+      const res = await fetch(`/api/sessions/${sessionId}/generate-note`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          summaryText: newTranscript.trim(),
+          existingNote: noteDraft.trim(),
+          attendance: students.map((s) => ({
+            name: `${s.firstName} ${s.lastName}`,
+            status: attendance[s.id] ?? s.attendance,
+          })),
+          sessionDate: format(new Date(sessionDate), "MMM d, yyyy"),
+          sessionType: SESSION_TYPE_LABELS[sessionType] ?? sessionType,
+          durationMins,
+        }),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error ?? "Augmentation failed");
+      const draft: string = json.draftNote;
+      setNoteDraft(draft);
+      setNoteExtractionContext(draft);
+      setGeneratedAt(new Date());
+      setHasUnsavedChanges(true);
+      toast.success("Note updated");
+      extractStructuredData(draft);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to update note");
+    } finally {
+      setGenerating(false);
+    }
+  }
+
   // ── Voice handler — receives transcript, updates context, auto-generates ────
   async function handleVoiceTranscript(text: string, mode: TranscriptMode) {
-    const newContext = mode === "append"
-      ? (summaryContext ? `${summaryContext} ${text}` : text)
-      : text;
-
-    setSummaryContext(newContext);
-
-    // Run note generation and LLM structured extraction in parallel
-    await Promise.all([
-      generateNote(newContext),
-      extractStructuredData(newContext),
-    ]);
+    if (mode === "append") {
+      // Add information mode — merge new transcript into existing note
+      if (!text.trim()) return; // silence recorded, nothing to do
+      setSummaryContext(summaryContext ? `${summaryContext} ${text}` : text);
+      await Promise.all([
+        augmentNote(text),
+        extractStructuredData(text),
+      ]);
+    } else {
+      // Replace mode — full regeneration
+      setSummaryContext(text);
+      await Promise.all([
+        generateNote(text),
+        extractStructuredData(text),
+      ]);
+    }
   }
 
   // ── Complete ─────────────────────────────────────────────────────────────────

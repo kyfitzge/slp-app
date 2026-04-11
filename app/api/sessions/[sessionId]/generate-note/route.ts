@@ -33,6 +33,8 @@ interface GenerateNoteBody {
   sessionDate?: string;
   sessionType?: string;
   durationMins?: number | null;
+  /** When present, augment this existing note rather than writing from scratch. */
+  existingNote?: string;
 }
 
 const CUEING_LABELS: Record<string, string> = {
@@ -100,6 +102,31 @@ SESSION DATA:
 ${dataBlock}
 
 Output ONLY the note text.`;
+  }
+
+  // ── Augmentation mode: merge new info into an existing note ─────────────────
+  if (body.existingNote?.trim()) {
+    return `You are a documentation specialist for a school-based Speech-Language Pathologist (SLP).
+
+An existing session note draft is provided. Your task is to AUGMENT it by incorporating the new information below — do not rewrite or restructure the existing content.
+
+═══ EXISTING NOTE ═══
+${body.existingNote.trim()}
+
+═══ NEW INFORMATION FROM SLP ═══
+${body.summaryText?.trim() ?? "(none provided)"}
+
+${dataBlock ? `═══ SESSION DATA (for context) ═══\n${dataBlock}\n` : ""}
+═══ AUGMENTATION RULES ═══
+1. Keep the existing note as the foundation — preserve its structure, tone, and existing content
+2. Add ONLY information that is genuinely new and not already covered in the existing note
+3. If new data (accuracy, trials, cueing) updates or corrects existing values, revise those sentences
+4. Integrate new content naturally so the result reads as one cohesive note
+5. If the new information adds nothing that isn't already in the note, return the existing note UNCHANGED
+6. Maintain clinical past-tense prose — no bullets, headers, or markdown
+7. Do not repeat or restate anything already present
+
+Output ONLY the augmented note text — no preamble, no labels.`;
   }
 
   return `You are a documentation specialist for a school-based Speech-Language Pathologist (SLP).
