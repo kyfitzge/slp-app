@@ -228,14 +228,7 @@ function SessionItem({ session }: { session: SessionRow }) {
               {dataSummary.uniqueGoals} goal{dataSummary.uniqueGoals !== 1 ? "s" : ""} tracked
               {" · "}avg {dataSummary.avgAccuracy}%
             </span>
-          ) : (
-            !session.isCancelled && (
-              <span className="text-xs text-muted-foreground/60 flex items-center gap-1">
-                <BarChart2 className="h-3 w-3" />
-                No data
-              </span>
-            )
-          )}
+          ) : null}
         </div>
 
         {/* Note preview */}
