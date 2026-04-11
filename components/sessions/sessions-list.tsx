@@ -175,9 +175,10 @@ function SessionItem({ session }: { session: SessionRow }) {
     session.sessionType.replace(/_/g, " ");
 
   return (
-    <div
+    <Link
+      href={`/sessions/${session.id}`}
       className={cn(
-        "group flex flex-col sm:flex-row sm:items-center gap-3 px-4 py-3.5 border-b last:border-0 transition-colors",
+        "group flex flex-col sm:flex-row sm:items-center gap-3 px-4 py-3.5 border-b last:border-0 transition-colors cursor-pointer",
         "hover:bg-muted/40",
         overdue && "bg-rose-50/30 hover:bg-rose-50/50"
       )}
@@ -239,16 +240,9 @@ function SessionItem({ session }: { session: SessionRow }) {
         )}
       </div>
 
-      {/* Actions */}
-      <div className="flex items-center gap-1.5 shrink-0">
-        <Button asChild size="sm" variant="outline" className="h-7 px-2.5 text-xs">
-          <Link href={`/sessions/${session.id}`}>
-            View
-            <ChevronRight className="h-3 w-3 ml-1" />
-          </Link>
-        </Button>
-      </div>
-    </div>
+      {/* Chevron indicator */}
+      <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0 opacity-0 group-hover:opacity-100 transition-opacity" />
+    </Link>
   );
 }
 
