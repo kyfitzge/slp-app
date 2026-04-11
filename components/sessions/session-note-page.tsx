@@ -1195,7 +1195,7 @@ function TextChatPanel({
       ]);
     } finally {
       setIsThinking(false);
-      setTimeout(() => textInputRef.current?.focus(), 50);
+      setTimeout(() => textInputRef.current?.focus({ preventScroll: true }), 50);
     }
   }
 
@@ -1405,7 +1405,7 @@ function SuggestEditsPanel({
       ]);
     } finally {
       setIsThinking(false);
-      setTimeout(() => textInputRef.current?.focus(), 50);
+      setTimeout(() => textInputRef.current?.focus({ preventScroll: true }), 50);
     }
   }
 
