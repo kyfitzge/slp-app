@@ -1667,9 +1667,10 @@ export function SessionNotePage({
                     transcript: summaryContext || undefined,
                   }}
                   onClose={() => setShowAiChat(false)}
-                  onApplyNote={(note) => {
-                    handleNoteChange(note);
-                    toast.success("Note updated from AI conversation");
+                  onApplyNote={(summary) => {
+                    // Route through the same generate-note pipeline as Record Summary
+                    // so the clinical note quality is consistent
+                    generateNote(summary);
                   }}
                 />
               )}
