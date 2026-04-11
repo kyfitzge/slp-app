@@ -18,7 +18,7 @@ import { cn } from "@/lib/utils";
 
 // ─── PLAAFP helpers ────────────────────────────────────────────────────────────
 
-const PLAAFP_SECTIONS = [
+export const PLAAFP_SECTIONS = [
   {
     key: "strengths",
     heading: "Strengths",
@@ -46,10 +46,10 @@ const PLAAFP_SECTIONS = [
   },
 ] as const;
 
-type PLAAFPKey = (typeof PLAAFP_SECTIONS)[number]["key"];
-type PLAAFPState = Record<PLAAFPKey, string>;
+export type PLAAFPKey = (typeof PLAAFP_SECTIONS)[number]["key"];
+export type PLAAFPState = Record<PLAAFPKey, string>;
 
-function parsePLAAFPForForm(raw?: string | null): PLAAFPState {
+export function parsePLAAFPForForm(raw?: string | null): PLAAFPState {
   const empty: PLAAFPState = {
     strengths: "", areasOfNeed: "", functionalImpact: "",
     baselinePerformance: "", communicationProfile: "",
@@ -147,18 +147,32 @@ interface IEPFormProps {
   studentId: string;
   iepId?: string;
   defaultValues?: Partial<CreateIEPInput>;
+  plaafp?: PLAAFPState;
+  onPlaafpChange?: (state: PLAAFPState) => void;
+  parentConcerns?: string;
+  onParentConcernsChange?: (text: string) => void;
 }
 
-export function IEPForm({ studentId, iepId, defaultValues }: IEPFormProps) {
+export function IEPForm({ studentId, iepId, defaultValues, plaafp: plaafpProp, onPlaafpChange, parentConcerns: parentConcernsProp, onParentConcernsChange }: IEPFormProps) {
   const router = useRouter();
   const isEditing = !!iepId;
 
   const today = format(new Date(), "yyyy-MM-dd");
   const oneYearFromNow = format(addYears(new Date(), 1), "yyyy-MM-dd");
 
-  const [plaafp, setPlaafp] = useState<PLAAFPState>(() =>
+  // Internal state — used when parent doesn't lift state (e.g. "new IEP" page)
+  const [internalPlaafp, setInternalPlaafp] = useState<PLAAFPState>(() =>
     parsePLAAFPForForm(defaultValues?.presentLevels)
   );
+  const [internalParentConcerns, setInternalParentConcerns] = useState(
+    defaultValues?.parentConcerns ?? ""
+  );
+
+  const plaafp = plaafpProp ?? internalPlaafp;
+  const parentConcerns = parentConcernsProp ?? internalParentConcerns;
+  const handlePlaafpChange = onPlaafpChange ?? setInternalPlaafp;
+  const handleParentConcernsChange = onParentConcernsChange ?? setInternalParentConcerns;
+
   const [showTransition, setShowTransition] = useState(!!defaultValues?.transitionNotes);
 
   const {
@@ -182,6 +196,7 @@ export function IEPForm({ studentId, iepId, defaultValues }: IEPFormProps) {
     try {
       const composed = composePLAAFP(plaafp);
       data.presentLevels = composed || data.presentLevels;
+      data.parentConcerns = parentConcerns;
 
       const url = isEditing ? `/api/ieps/${iepId}` : "/api/ieps";
       const method = isEditing ? "PUT" : "POST";
@@ -279,7 +294,7 @@ export function IEPForm({ studentId, iepId, defaultValues }: IEPFormProps) {
             <Field key={key} label={heading}>
               <Textarea
                 value={plaafp[key]}
-                onChange={(e) => setPlaafp((prev) => ({ ...prev, [key]: e.target.value }))}
+                onChange={(e) => handlePlaafpChange({ ...plaafp, [key]: e.target.value })}
                 placeholder={placeholder}
                 rows={3}
                 className="text-sm resize-y"
@@ -292,7 +307,8 @@ export function IEPForm({ studentId, iepId, defaultValues }: IEPFormProps) {
       {/* ── Parent & Guardian Input ───────────────────────────────────────── */}
       <SectionCard title="Parent & Guardian Input">
         <Textarea
-          {...register("parentConcerns")}
+          value={parentConcerns}
+          onChange={(e) => handleParentConcernsChange(e.target.value)}
           placeholder="Concerns, priorities, and questions raised by parents or guardians…"
           rows={3}
           className="text-sm resize-y"
