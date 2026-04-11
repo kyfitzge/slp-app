@@ -725,7 +725,6 @@ function AiChatPanel({
   onApplyNote: (note: string) => void;
 }) {
   const [messages, setMessages] = useState<AiChatMessage[]>([]);
-  const [textInput, setTextInput] = useState("");
   const [voiceState, setVoiceState] = useState<AiVoiceState>("ai_thinking");
   const [pendingNoteUpdate, setPendingNoteUpdate] = useState<string | null>(null);
   const [statusMsg, setStatusMsg] = useState<string | null>(null);
@@ -733,7 +732,6 @@ function AiChatPanel({
 
   const initRef = useRef(false);
   const bottomRef = useRef<HTMLDivElement>(null);
-  const textInputRef = useRef<HTMLTextAreaElement>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
   const streamRef = useRef<MediaStream | null>(null);
@@ -940,7 +938,6 @@ function AiChatPanel({
     const userMsg: AiChatMessage = { role: "user", content: trimmed };
     const newHistory = [...messages, userMsg];
     setMessages(newHistory);
-    setTextInput("");
     setPendingNoteUpdate(null);
     setStatusMsg(null);
     sendToAI(newHistory, speakResponse);
@@ -1119,33 +1116,6 @@ function AiChatPanel({
           )}
         </div>
 
-        {/* Text fallback */}
-        <div className="w-full flex gap-2 items-end">
-          <textarea
-            ref={textInputRef}
-            value={textInput}
-            onChange={(e) => setTextInput(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" && !e.shiftKey) {
-                e.preventDefault();
-                submitMessage(textInput, false);
-              }
-            }}
-            placeholder="Or type your answer… (Enter to send)"
-            rows={2}
-            disabled={isProcessing || voiceState === "recording"}
-            className="flex-1 resize-none text-xs rounded-md border border-input bg-background px-2.5 py-2 focus:outline-none focus:ring-1 focus:ring-violet-400 disabled:opacity-40"
-          />
-          <Button
-            type="button"
-            size="icon"
-            disabled={isProcessing || voiceState === "recording" || !textInput.trim()}
-            onClick={() => submitMessage(textInput, false)}
-            className="h-8 w-8 shrink-0 bg-violet-600 hover:bg-violet-700"
-          >
-            <Send className="h-3.5 w-3.5" />
-          </Button>
-        </div>
       </div>
     </div>
   );
