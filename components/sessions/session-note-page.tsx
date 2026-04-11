@@ -1692,14 +1692,23 @@ export function SessionNotePage({
     setNoteDraft(text);
     setNoteStatus("idle");
     setHasUnsavedChanges(true);
-    // Always update the note extraction context so regex fallback stays in sync
     setNoteExtractionContext(text);
+
+    // If the note is fully cleared, reset all derived/extracted data so the
+    // structured session data panel clears out too.
+    if (!text.trim()) {
+      setSummaryContext("");
+      setAiExtractions({});
+      setAiSessionData({});
+      setGoalOverrides({});
+      if (noteDebouncRef.current) clearTimeout(noteDebouncRef.current);
+      return;
+    }
+
     // Run AI extraction with debounce — combine voice transcript + note for best coverage
     if (noteDebouncRef.current) clearTimeout(noteDebouncRef.current);
     noteDebouncRef.current = setTimeout(() => {
       if (text.trim().length > 40) {
-        // Send the clinical note (and voice transcript if present) so the extractor
-        // can parse structured data from whichever source is richer
         const combined = summaryContext.trim()
           ? `${summaryContext}\n\n${text}`
           : text;
@@ -1983,6 +1992,10 @@ export function SessionNotePage({
                   onClearNote={() => {
                     setNoteDraft("");
                     setSummaryContext("");
+                    setNoteExtractionContext("");
+                    setAiExtractions({});
+                    setAiSessionData({});
+                    setGoalOverrides({});
                     setHasUnsavedChanges(false);
                   }}
                 />
