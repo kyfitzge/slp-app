@@ -174,15 +174,20 @@ function IEPTextChatPanel({
       setMessages((prev) => [...prev, aiMsg]);
 
       // Auto-apply field updates immediately — no manual Apply step needed
-      if (json.iepUpdate && Object.keys(json.iepUpdate).length > 0) {
-        onApplyFields(json.iepUpdate);
-        const appliedLabels = Object.keys(json.iepUpdate)
-          .map((k) => FIELD_LABELS[k] ?? k)
-          .join(", ");
-        setMessages((prev) => [
-          ...prev,
-          { role: "assistant", content: `Applied to IEP: ${appliedLabels}`, kind: "update" },
-        ]);
+      if (json.iepUpdate && typeof json.iepUpdate === "object") {
+        const validEntries = Object.entries(json.iepUpdate as Record<string, string>).filter(
+          ([, v]) => typeof v === "string" && v.trim().length > 0
+        );
+        if (validEntries.length > 0) {
+          onApplyFields(Object.fromEntries(validEntries));
+          const appliedLabels = validEntries
+            .map(([k]) => FIELD_LABELS[k] ?? k)
+            .join(", ");
+          setMessages((prev) => [
+            ...prev,
+            { role: "assistant", content: `Applied to IEP: ${appliedLabels}`, kind: "update" },
+          ]);
+        }
       }
     } catch {
       setMessages((prev) => [
@@ -565,15 +570,20 @@ function IEPVoiceChatPanel({
       const aiMsg: ChatMessage = { role: "assistant", content: json.reply };
       setMessages((prev) => [...prev, aiMsg]);
 
-      if (json.iepUpdate && Object.keys(json.iepUpdate).length > 0) {
-        onApplyFields(json.iepUpdate);
-        const appliedLabels = Object.keys(json.iepUpdate)
-          .map((k) => FIELD_LABELS[k] ?? k)
-          .join(", ");
-        setMessages((prev) => [
-          ...prev,
-          { role: "assistant", content: `Applied to IEP: ${appliedLabels}`, kind: "update" },
-        ]);
+      if (json.iepUpdate && typeof json.iepUpdate === "object") {
+        const validEntries = Object.entries(json.iepUpdate as Record<string, string>).filter(
+          ([, v]) => typeof v === "string" && v.trim().length > 0
+        );
+        if (validEntries.length > 0) {
+          onApplyFields(Object.fromEntries(validEntries));
+          const appliedLabels = validEntries
+            .map(([k]) => FIELD_LABELS[k] ?? k)
+            .join(", ");
+          setMessages((prev) => [
+            ...prev,
+            { role: "assistant", content: `Applied to IEP: ${appliedLabels}`, kind: "update" },
+          ]);
+        }
       }
 
       if (speakResponse && json.reply) {
@@ -795,7 +805,6 @@ export function IEPPageClient({
   };
 
   function onApplyFields(fields: Record<string, string>) {
-    const newPlaafp = { ...plaafp };
     const plaafpKeyMap: Record<string, PLAAFPKey> = {
       strengths: "strengths",
       areasOfNeed: "areasOfNeed",
@@ -803,11 +812,18 @@ export function IEPPageClient({
       baselinePerformance: "baselinePerformance",
       communicationProfile: "communicationProfile",
     };
+    // Use functional updater so we always spread the latest state,
+    // regardless of closure age.
+    setPlaafp((prev) => {
+      const next = { ...prev };
+      for (const [key, value] of Object.entries(fields)) {
+        if (plaafpKeyMap[key] && value) next[plaafpKeyMap[key]] = value;
+      }
+      return next;
+    });
     for (const [key, value] of Object.entries(fields)) {
-      if (plaafpKeyMap[key]) newPlaafp[plaafpKeyMap[key]] = value;
-      if (key === "parentConcerns") setParentConcerns(value);
+      if (key === "parentConcerns" && value) setParentConcerns(value);
     }
-    setPlaafp(newPlaafp);
   }
 
   return (

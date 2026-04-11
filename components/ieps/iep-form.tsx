@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -167,6 +167,16 @@ export function IEPForm({ studentId, iepId, defaultValues, plaafp: plaafpProp, o
   const [internalParentConcerns, setInternalParentConcerns] = useState(
     defaultValues?.parentConcerns ?? ""
   );
+
+  // When the parent pushes a new plaafp (e.g. from AI assistant), sync internal
+  // state so textareas always display the latest value.
+  useEffect(() => {
+    if (plaafpProp !== undefined) setInternalPlaafp(plaafpProp);
+  }, [plaafpProp]);
+
+  useEffect(() => {
+    if (parentConcernsProp !== undefined) setInternalParentConcerns(parentConcernsProp);
+  }, [parentConcernsProp]);
 
   const plaafp = plaafpProp ?? internalPlaafp;
   const parentConcerns = parentConcernsProp ?? internalParentConcerns;
