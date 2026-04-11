@@ -1585,7 +1585,7 @@ export function SessionNotePage({
       {/* ══════════════════════════════════════════════════════
           TWO-COLUMN LAYOUT
       ══════════════════════════════════════════════════════ */}
-      <div className="grid grid-cols-1 lg:grid-cols-[2fr_3fr] gap-5 items-start">
+      <div className="grid grid-cols-1 lg:grid-cols-[2fr_1fr] gap-5 items-start">
 
         {/* ── LEFT COLUMN ────────────────────────────────── */}
         <div className="space-y-4">
