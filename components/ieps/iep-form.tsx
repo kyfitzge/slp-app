@@ -500,17 +500,19 @@ export function IEPForm({ studentId, iepId, defaultValues }: IEPFormProps) {
       )}
 
       {/* ── Actions ── */}
-      <div className="flex gap-3 pt-1 pb-8">
+      <div className="flex gap-3 pt-1">
         <Button type="submit" disabled={isSubmitting}>
-          {isSubmitting ? "Saving…" : isEditing ? "Update IEP" : "Create IEP"}
+          {isSubmitting ? "Saving…" : isEditing ? "Save Changes" : "Create IEP"}
         </Button>
-        <Button
-          type="button"
-          variant="outline"
-          onClick={() => router.back()}
-        >
-          Cancel
-        </Button>
+        {!isEditing && (
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => router.back()}
+          >
+            Cancel
+          </Button>
+        )}
       </div>
     </form>
   );

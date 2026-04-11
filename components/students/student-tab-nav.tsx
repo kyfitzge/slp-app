@@ -6,8 +6,7 @@ import { cn } from "@/lib/utils";
 
 const TABS = [
   { label: "Overview",       href: (id: string) => `/students/${id}/overview` },
-  { label: "IEPs",           href: (id: string) => `/students/${id}/ieps` },
-  { label: "Goals",          href: (id: string) => `/students/${id}/goals` },
+  { label: "IEP",            href: (id: string) => `/students/${id}/ieps` },
   { label: "Sessions",       href: (id: string) => `/students/${id}/sessions` },
   { label: "Progress Notes", href: (id: string) => `/students/${id}/progress` },
 ];

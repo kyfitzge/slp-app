@@ -5,7 +5,7 @@ import { notFound } from "next/navigation";
 import { StudentTabNav } from "@/components/students/student-tab-nav";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { PlusCircle, FileText, Pencil } from "lucide-react";
+import { FileText, Pencil } from "lucide-react";
 import { IEPStatusBadge } from "@/components/shared/status-badge";
 import { getUrgencyLevel } from "@/lib/utils/format-date";
 
@@ -62,17 +62,11 @@ export default async function StudentLayout({
 
           {/* Right: quick actions */}
           <div className="flex items-center gap-2 flex-wrap">
-            <Button asChild size="sm" variant="outline" className="h-8 text-xs">
-              <Link href={`/students/${studentId}/goals/new`}>
-                <PlusCircle className="h-3.5 w-3.5 mr-1.5" />
-                Add Goal
-              </Link>
-            </Button>
             {activeIEP && (
               <Button asChild size="sm" variant="outline" className="h-8 text-xs">
                 <Link href={`/students/${studentId}/ieps/${activeIEP.id}`}>
                   <FileText className="h-3.5 w-3.5 mr-1.5" />
-                  View IEP
+                  IEP
                 </Link>
               </Button>
             )}
