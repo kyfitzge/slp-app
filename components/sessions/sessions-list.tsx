@@ -380,20 +380,6 @@ export function SessionsList({ sessions }: SessionsListProps) {
         </Button>
       </div>
 
-      {/* Needs-note callout banner */}
-      {counts.needs_note > 0 && filter === "all" && (
-        <button
-          onClick={() => setFilter("needs_note")}
-          className="w-full flex items-center justify-between rounded-xl border border-amber-200 bg-amber-50/60 px-4 py-2.5 text-left hover:bg-amber-50 transition-colors"
-        >
-          <span className="flex items-center gap-2 text-sm font-medium text-amber-700">
-            <CircleAlert className="h-4 w-4" />
-            {counts.needs_note} session{counts.needs_note !== 1 ? "s" : ""} still need documentation
-          </span>
-          <span className="text-xs text-amber-600 font-medium">View →</span>
-        </button>
-      )}
-
       {/* Session list */}
       {filtered.length === 0 ? (
         <div className="rounded-xl border bg-card py-12 text-center">
