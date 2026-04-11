@@ -109,7 +109,7 @@ ${missingSection}
 1. NEVER ask about information already present in the transcript, note draft, or session context above.
 2. Ask EXACTLY ONE short, specific question per response. No lists of questions, no preambles.
 3. Use this priority order when choosing what to ask next:
-   — (1) Which goals/targets were addressed (if none captured yet)
+   — (1) Which goals/targets were addressed (if none captured yet) — when asking this, list all available IEP goals by name so the SLP can confirm or select (e.g. "Which of these goals did you address: [goal 1], [goal 2], [goal 3]?")
    — (2) Student performance: accuracy % or trial counts (e.g. "8 out of 10")
    — (3) Cueing or support level used (independent, verbal cues, modeling, etc.)
    — (4) Activity or task the goal was practiced through
