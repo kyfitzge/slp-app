@@ -39,12 +39,12 @@ function buildPrompt(transcript: string, goals: { id: string; name: string; doma
 
   return `You are a clinical documentation assistant for a school-based speech-language pathologist.
 
-Extract structured data from the session transcript below.
+Extract structured data from the session text below. The text may be a raw voice transcript, a polished clinical note, or both — extract from whichever contains the most detail.
 
 GOALS WORKED ON THIS SESSION:
 ${goalList}
 
-TRANSCRIPT:
+SESSION TEXT:
 "${transcript}"
 
 Return ONLY a JSON object in exactly this shape — no markdown, no explanation:
@@ -63,20 +63,21 @@ Return ONLY a JSON object in exactly this shape — no markdown, no explanation:
 }
 
 EXTRACTION RULES:
-1. Only include goals that are explicitly discussed in the transcript. Omit goals not mentioned.
-2. For trials: "8/10", "8 out of 10", "8 correct out of 10" → trialsCorrect=8, trialsTotal=10, accuracy=80
-3. For percentages without trial counts: "80%" → accuracy=80, trialsCorrect=null, trialsTotal=null
-4. Cueing level mapping:
-   - "independently" / "no cues" / "on her own" → INDEPENDENT
-   - "minimal cues" / "min verbal" / "indirect verbal" → INDIRECT_VERBAL
-   - "moderate cues" / "mod verbal" / "direct verbal" → DIRECT_VERBAL
-   - "maximum support" / "max assist" / "hand-over-hand" → MAXIMUM_ASSISTANCE
-   - "gestural cue" / "gesture" → GESTURAL
-   - "modeling" / "model" → MODELING
-   - "physical guidance" / "physical prompt" → PHYSICAL
-5. Duration: look for "20-minute session", "worked for 30 minutes", etc.
-6. Participation: "great participation" / "very engaged" → excellent; "good effort" → good; "fair" → fair; "refused" / "difficult" → poor
-7. If a number is ambiguous between two goals, assign it to the goal whose name appears closest in the transcript.`;
+1. Include any goal that is clearly referenced — match by goal name, domain keyword, target sound/skill, or clinical description (e.g. "articulation targets", "language goals", "/r/ production", "AAC device").
+2. For trials: "8/10", "8 out of 10", "8 correct out of 10", "18 of 25 correct" → trialsCorrect=8 (or 18), trialsTotal=10 (or 25), compute accuracy.
+3. For percentages: "80% accuracy", "demonstrated 72% accuracy" → accuracy=80 (or 72).
+4. Cueing level — map ALL of these forms:
+   - "independently" / "no cues" / "without cues" / "on her/his own" → INDEPENDENT
+   - "minimal cues" / "min verbal" / "indirect verbal cues" / "minimal verbal cueing" → INDIRECT_VERBAL
+   - "moderate cues" / "mod verbal" / "direct verbal cues" / "required direct verbal cues" / "with verbal cues" → DIRECT_VERBAL
+   - "maximum support" / "max assist" / "maximal verbal cues" / "required maximal" / "hand-over-hand" → MAXIMUM_ASSISTANCE
+   - "gestural cue" / "gesture" / "visual cue" → GESTURAL
+   - "modeling" / "model" / "imitation" → MODELING
+   - "physical guidance" / "physical prompt" / "hand-over-hand" → PHYSICAL
+5. Duration: "20-minute session", "30 minutes", "seen for 45 min" → duration in minutes.
+6. Participation: "excellent participation" / "very engaged" / "cooperative" → excellent; "good effort" / "participated well" → good; "fair participation" / "inconsistent engagement" → fair; "refused" / "non-compliant" / "poor participation" → poor.
+7. If a number is ambiguous between two goals, assign it to the goal whose name or domain appears closest in the text.
+8. A clinical note saying "Student produced X with Y% accuracy with Z cueing" — extract accuracy=Y and map Z to the correct cueing level.`;
 }
 
 export async function POST(

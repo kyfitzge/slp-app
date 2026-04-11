@@ -184,7 +184,7 @@ function extractDataForGoal(transcript: string, goal: Goal): ExtractedData {
   if (!transcript.trim()) return {};
   const name = (goal.shortName ?? goal.goalText).toLowerCase();
   const domain = goal.domain.toLowerCase().replace(/_/g, " ");
-  const keywords = [...name.split(/\s+/).filter((w) => w.length > 3), domain];
+  const keywords = [...name.split(/\s+/).filter((w) => w.length > 2), domain];
   // Split on sentence boundaries
   const sentences = transcript.split(/(?<=[.!?])\s+/);
   const relevant = sentences.filter((s) =>
@@ -240,7 +240,7 @@ function matchGoalsFromTranscript(transcript: string, goals: Goal[]): Goal[] {
   const lower = transcript.toLowerCase();
   return goals.filter((g) => {
     const name = (g.shortName ?? g.goalText).toLowerCase();
-    const words = name.split(/\s+/).filter((w) => w.length > 3);
+    const words = name.split(/\s+/).filter((w) => w.length > 2);
     const domainKeyword = g.domain.toLowerCase().replace(/_/g, " ");
     const domainMatch = lower.includes(domainKeyword);
     const nameMatch = words.some((w) => lower.includes(w));
@@ -1421,6 +1421,8 @@ export function SessionNotePage({
       setGeneratedAt(new Date());
       setHasUnsavedChanges(true);
       toast.success("Note generated");
+      // Extract structured data from the generated clinical note
+      extractStructuredData(draft);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Failed to generate note");
     } finally {
@@ -1451,16 +1453,18 @@ export function SessionNotePage({
     setNoteDraft(text);
     setNoteStatus("idle");
     setHasUnsavedChanges(true);
-    // Update regex extraction context immediately from typed text
-    // (only when there is no voice transcript — voice always takes priority)
-    if (!summaryContext.trim()) {
-      setNoteExtractionContext(text);
-    }
-    // Run AI extraction with debounce (local state only — no DB save)
+    // Always update the note extraction context so regex fallback stays in sync
+    setNoteExtractionContext(text);
+    // Run AI extraction with debounce — combine voice transcript + note for best coverage
     if (noteDebouncRef.current) clearTimeout(noteDebouncRef.current);
     noteDebouncRef.current = setTimeout(() => {
-      if (!summaryContext.trim() && text.trim().length > 40) {
-        extractStructuredData(text);
+      if (text.trim().length > 40) {
+        // Send the clinical note (and voice transcript if present) so the extractor
+        // can parse structured data from whichever source is richer
+        const combined = summaryContext.trim()
+          ? `${summaryContext}\n\n${text}`
+          : text;
+        extractStructuredData(combined);
       }
     }, 1500);
   }
