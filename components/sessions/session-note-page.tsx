@@ -385,14 +385,16 @@ function VoiceCapture({
 
       {/* ── EMPTY STATE: no note yet — Record Summary + Talk to AI ── */}
       {!hasExistingContent && !isRecordingAny && state !== "processing" && (
-        <div className="grid grid-cols-2 gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
           <Tip tip="Speak a recap and your note will be auto-generated.">
             <Button
               type="button"
+              size="sm"
+              variant="ghost"
               onClick={() => startRecording("replace")}
-              className="w-full gap-2 justify-center h-10 text-sm"
+              className="gap-1.5 h-8 text-xs text-muted-foreground hover:text-foreground"
             >
-              <Mic className="h-4 w-4" />
+              <Mic className="h-3.5 w-3.5" />
               Record summary
             </Button>
           </Tip>
@@ -401,11 +403,12 @@ function VoiceCapture({
             <Tip tip="AI interviews you with guided questions to fill in your note.">
               <Button
                 type="button"
-                variant="outline"
+                size="sm"
+                variant="ghost"
                 onClick={onTalkToAI}
-                className="w-full gap-2 justify-center h-10 text-sm text-violet-600 border-violet-300 hover:bg-violet-50"
+                className="gap-1.5 h-8 text-xs text-violet-500 hover:text-violet-700 hover:bg-violet-50"
               >
-                <MessageSquare className="h-4 w-4" />
+                <MessageSquare className="h-3.5 w-3.5" />
                 Talk to AI
               </Button>
             </Tip>
