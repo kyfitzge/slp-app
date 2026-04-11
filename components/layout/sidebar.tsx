@@ -16,7 +16,7 @@ import { toast } from "sonner";
 
 const navItems = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
-  { href: "/sessions",  label: "Sessions",  icon: ClipboardList },
+  { href: "/sessions",  label: "Session Notes",  icon: ClipboardList },
 ];
 
 interface SidebarProps {

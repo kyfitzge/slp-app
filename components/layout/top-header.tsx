@@ -12,7 +12,7 @@ function useBreadcrumbs() {
     dashboard: "Dashboard",
     students: "Students",
     schedule: "Schedule",
-    sessions: "Sessions",
+    sessions: "Session Notes",
     settings: "Settings",
     new: "New",
     edit: "Edit",
