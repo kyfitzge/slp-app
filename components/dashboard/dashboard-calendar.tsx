@@ -746,13 +746,9 @@ export function DashboardCalendar({ initialSessions }: DashboardCalendarProps) {
         // Reschedule existing session
         handleSessionMove(data.sessionId, date, startTime);
       } else {
-        // Create new session from student drop
+        // Create new session from student drop — no dialog, use defaults
         const { studentId, studentName } = data;
-        setDraft({ studentId, studentName, date, startTime });
-        setDraftType("INDIVIDUAL");
-        setDraftDuration("30");
-        setDraftTime(startTime);
-        setDraftLocation("");
+        createSessionImmediate({ studentId, studentName, date, startTime });
       }
     } catch { /* ignore */ }
   }
@@ -873,6 +869,47 @@ export function DashboardCalendar({ initialSessions }: DashboardCalendarProps) {
   }, [resizePreview, sessions]);
 
   // ── Create session ─────────────────────────────────────────────────────────
+
+  // Called directly from drag-drop — no dialog, uses sensible defaults
+  async function createSessionImmediate({
+    studentId,
+    studentName,
+    date,
+    startTime,
+  }: {
+    studentId: string;
+    studentName: string;
+    date: Date;
+    startTime: string;
+  }) {
+    try {
+      const res = await fetch("/api/sessions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          sessionDate:  format(date, "yyyy-MM-dd"),
+          sessionType:  "INDIVIDUAL",
+          startTime:    startTime || undefined,
+          durationMins: 30,
+          studentIds:   [studentId],
+        }),
+      });
+      if (!res.ok) throw new Error();
+      const { session } = await res.json();
+      toast.success("Session scheduled");
+      const firstName = studentName.split(" ")[0];
+      const lastName  = studentName.split(" ").slice(1).join(" ");
+      setSessions(prev => [...prev, {
+        ...session,
+        sessionDate: toLocalDate(session.sessionDate ?? date),
+        hasNotes: false,
+        sessionStudents: [{ student: { id: studentId, firstName, lastName } }],
+      }]);
+      router.refresh();
+    } catch {
+      toast.error("Failed to create session");
+    }
+  }
 
   async function handleCreate() {
     if (!draft) return;
