@@ -635,9 +635,10 @@ function EditableFieldRow({
 }
 
 // ─── AiChatPanel ─────────────────────────────────────────────────────────────
-// Voice-first conversational assistant for session note documentation.
-// Primary flow: tap mic → speak → transcribe → AI asks next question (read aloud)
-// Text input available as fallback.
+// Conversational voice assistant — like talking to ChatGPT.
+// Flow: AI speaks question (OpenAI TTS) → auto-starts listening → SLP speaks
+//       → transcribe → send to Claude → AI speaks next question → repeat.
+// Text input available as fallback at any time.
 
 interface AiChatMessage {
   role: "user" | "assistant";
@@ -662,7 +663,12 @@ interface AiChatContext {
   currentNote: string;
 }
 
-type VoiceInterviewState = "idle" | "recording" | "transcribing" | "ai_thinking" | "speaking";
+type AiVoiceState =
+  | "idle"          // waiting for tap
+  | "recording"     // mic is live
+  | "transcribing"  // sending audio to AssemblyAI
+  | "ai_thinking"   // waiting for Claude response
+  | "speaking";     // OpenAI TTS audio is playing
 
 function AiChatPanel({
   sessionId,
@@ -677,9 +683,10 @@ function AiChatPanel({
 }) {
   const [messages, setMessages] = useState<AiChatMessage[]>([]);
   const [textInput, setTextInput] = useState("");
-  const [voiceState, setVoiceState] = useState<VoiceInterviewState>("idle");
+  const [voiceState, setVoiceState] = useState<AiVoiceState>("ai_thinking");
   const [pendingNoteUpdate, setPendingNoteUpdate] = useState<string | null>(null);
-  const [micError, setMicError] = useState<string | null>(null);
+  const [statusMsg, setStatusMsg] = useState<string | null>(null);
+  const [ttsAvailable, setTtsAvailable] = useState(true);
 
   const initRef = useRef(false);
   const bottomRef = useRef<HTMLDivElement>(null);
@@ -687,13 +694,14 @@ function AiChatPanel({
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
   const streamRef = useRef<MediaStream | null>(null);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const autoRecordRef = useRef(false);
 
-  // Auto-scroll
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, voiceState]);
 
-  // Open with first AI question on mount
+  // Kick off the first AI question on mount
   useEffect(() => {
     if (!initRef.current) {
       initRef.current = true;
@@ -702,77 +710,88 @@ function AiChatPanel({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Cleanup stream on unmount
+  // Cleanup on unmount
   useEffect(() => {
     return () => {
       streamRef.current?.getTracks().forEach((t) => t.stop());
-      window.speechSynthesis?.cancel();
+      audioRef.current?.pause();
     };
   }, []);
 
-  function speakText(text: string, onDone?: () => void) {
-    if (!window.speechSynthesis) {
-      onDone?.();
-      return;
-    }
-    window.speechSynthesis.cancel();
-    const utt = new SpeechSynthesisUtterance(text);
-    utt.rate = 1.0;
-    utt.pitch = 1.0;
-    utt.onend = () => {
-      setVoiceState("idle");
-      onDone?.();
-    };
-    utt.onerror = () => {
-      setVoiceState("idle");
-      onDone?.();
-    };
+  // ── TTS via OpenAI ──────────────────────────────────────────────────────────
+  async function playTTS(text: string, { thenRecord = false } = {}) {
+    autoRecordRef.current = thenRecord;
     setVoiceState("speaking");
-    window.speechSynthesis.speak(utt);
-  }
 
-  async function sendToAI(history: AiChatMessage[], speakResponse = false) {
-    setVoiceState("ai_thinking");
+    // Stop any in-progress audio
+    if (audioRef.current) {
+      audioRef.current.pause();
+      audioRef.current = null;
+    }
+
     try {
-      const res = await fetch(`/api/sessions/${sessionId}/chat`, {
+      const res = await fetch("/api/tts", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ messages: history, context }),
+        body: JSON.stringify({ text }),
       });
-      const json = await res.json();
-      if (!res.ok) throw new Error(json.error ?? "AI error");
 
-      const aiMsg: AiChatMessage = { role: "assistant", content: json.reply };
-      setMessages((prev) => [...prev, aiMsg]);
-
-      if (json.noteUpdate) {
-        setPendingNoteUpdate(json.noteUpdate);
-      }
-
-      if (speakResponse && json.reply) {
-        speakText(json.reply);
-      } else {
+      if (!res.ok) {
+        // TTS not configured — fall back to silent mode
+        setTtsAvailable(false);
         setVoiceState("idle");
+        if (thenRecord) {
+          setTimeout(startRecording, 300);
+        }
+        return;
       }
-    } catch {
-      const errMsg: AiChatMessage = {
-        role: "assistant",
-        content: "Sorry, I had trouble connecting. Please try again.",
+
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const audio = new Audio(url);
+      audioRef.current = audio;
+
+      audio.onended = () => {
+        URL.revokeObjectURL(url);
+        audioRef.current = null;
+        if (autoRecordRef.current) {
+          // Small gap so the mic doesn't catch audio bleed
+          setTimeout(startRecording, 600);
+        } else {
+          setVoiceState("idle");
+        }
       };
-      setMessages((prev) => [...prev, errMsg]);
+
+      audio.onerror = () => {
+        URL.revokeObjectURL(url);
+        audioRef.current = null;
+        setVoiceState("idle");
+      };
+
+      await audio.play();
+    } catch {
       setVoiceState("idle");
     }
   }
 
+  // ── Interrupt AI speech and start recording immediately ─────────────────────
+  function interruptAndRecord() {
+    autoRecordRef.current = false;
+    if (audioRef.current) {
+      audioRef.current.pause();
+      audioRef.current = null;
+    }
+    startRecording();
+  }
+
+  // ── Recording ───────────────────────────────────────────────────────────────
   async function startRecording() {
-    setMicError(null);
-    window.speechSynthesis?.cancel();
+    setStatusMsg(null);
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       streamRef.current = stream;
       chunksRef.current = [];
 
-      // Pick a supported MIME type
       const mimeType = MediaRecorder.isTypeSupported("audio/webm;codecs=opus")
         ? "audio/webm;codecs=opus"
         : MediaRecorder.isTypeSupported("audio/webm")
@@ -789,16 +808,14 @@ function AiChatPanel({
       recorder.onstop = async () => {
         stream.getTracks().forEach((t) => t.stop());
         streamRef.current = null;
-        const blob = new Blob(chunksRef.current, {
-          type: mimeType || "audio/webm",
-        });
-        await transcribeAndRespond(blob);
+        const blob = new Blob(chunksRef.current, { type: mimeType || "audio/webm" });
+        await transcribeAndSend(blob);
       };
 
       recorder.start(250);
       setVoiceState("recording");
     } catch {
-      setMicError("Microphone access denied. Use text input below.");
+      setStatusMsg("Microphone access denied. Use the text box below.");
       setVoiceState("idle");
     }
   }
@@ -810,7 +827,8 @@ function AiChatPanel({
     }
   }
 
-  async function transcribeAndRespond(blob: Blob) {
+  // ── Transcription → AI ──────────────────────────────────────────────────────
+  async function transcribeAndSend(blob: Blob) {
     setVoiceState("transcribing");
     try {
       const form = new FormData();
@@ -824,64 +842,86 @@ function AiChatPanel({
       const json = await res.json();
       if (!res.ok) throw new Error(json.error ?? "Transcription failed");
 
-      const transcript: string = json.transcript ?? json.text ?? "";
-      if (!transcript.trim()) {
+      const transcript: string = (json.transcript ?? json.text ?? "").trim();
+      if (!transcript) {
+        setStatusMsg("Didn't catch that — tap the mic and try again.");
         setVoiceState("idle");
         return;
       }
 
-      submitUserMessage(transcript, true);
+      submitMessage(transcript, true);
     } catch {
-      setMicError("Transcription failed. Please try again or use text input.");
+      setStatusMsg("Transcription failed. Try again or use the text box.");
       setVoiceState("idle");
     }
   }
 
-  function submitUserMessage(text: string, speakResponse = false) {
+  // ── Send message to Claude ───────────────────────────────────────────────────
+  async function sendToAI(history: AiChatMessage[], speakResponse: boolean) {
+    setVoiceState("ai_thinking");
+    try {
+      const res = await fetch(`/api/sessions/${sessionId}/chat`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ messages: history, context }),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error ?? "AI error");
+
+      const aiMsg: AiChatMessage = { role: "assistant", content: json.reply };
+      setMessages((prev) => [...prev, aiMsg]);
+
+      if (json.noteUpdate) setPendingNoteUpdate(json.noteUpdate);
+
+      if (speakResponse && json.reply) {
+        // After AI speaks, auto-start listening for the SLP's next answer
+        await playTTS(json.reply, { thenRecord: ttsAvailable });
+        if (!ttsAvailable) setVoiceState("idle");
+      } else {
+        setVoiceState("idle");
+      }
+    } catch {
+      setMessages((prev) => [
+        ...prev,
+        { role: "assistant", content: "Sorry, I had trouble connecting. Please try again." },
+      ]);
+      setVoiceState("idle");
+    }
+  }
+
+  function submitMessage(text: string, speakResponse = false) {
     const trimmed = text.trim();
     if (!trimmed) return;
-
     const userMsg: AiChatMessage = { role: "user", content: trimmed };
     const newHistory = [...messages, userMsg];
     setMessages(newHistory);
     setTextInput("");
     setPendingNoteUpdate(null);
+    setStatusMsg(null);
     sendToAI(newHistory, speakResponse);
   }
 
-  function handleTextSend() {
-    submitUserMessage(textInput, false);
-  }
-
-  function handleKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
-    if (e.key === "Enter" && !e.shiftKey) {
-      e.preventDefault();
-      handleTextSend();
-    }
-  }
-
   function applyNote() {
-    if (pendingNoteUpdate) {
-      onApplyNote(pendingNoteUpdate);
-      setPendingNoteUpdate(null);
-      const confirmMsg: AiChatMessage = {
-        role: "assistant",
-        content: "Note updated. Is there anything else you'd like to add or clarify?",
-      };
-      setMessages((prev) => [...prev, confirmMsg]);
-    }
+    if (!pendingNoteUpdate) return;
+    onApplyNote(pendingNoteUpdate);
+    setPendingNoteUpdate(null);
+    setMessages((prev) => [
+      ...prev,
+      { role: "assistant", content: "Note updated. Is there anything else to add?" },
+    ]);
   }
 
-  const isProcessing =
-    voiceState === "transcribing" || voiceState === "ai_thinking";
+  // ── Derived UI state ────────────────────────────────────────────────────────
+  const isProcessing = voiceState === "transcribing" || voiceState === "ai_thinking";
+  const isSpeaking = voiceState === "speaking";
 
-  const voiceStateLabel: Record<VoiceInterviewState, string> = {
+  const micLabel = {
     idle: "Tap to speak",
-    recording: "Recording… tap to stop",
+    recording: "Listening… tap to stop",
     transcribing: "Transcribing…",
-    ai_thinking: "AI is thinking…",
-    speaking: "AI is speaking…",
-  };
+    ai_thinking: "Thinking…",
+    speaking: "Tap to interrupt",
+  }[voiceState];
 
   return (
     <div className="rounded-lg border border-violet-200 bg-violet-50/40 overflow-hidden">
@@ -891,38 +931,37 @@ function AiChatPanel({
           <div className="flex items-center justify-center h-5 w-5 rounded bg-violet-600/10">
             <Bot className="h-3.5 w-3.5 text-violet-600" />
           </div>
-          <span className="text-xs font-semibold text-violet-800">AI Voice Interview</span>
+          <span className="text-xs font-semibold text-violet-800">AI Voice Assistant</span>
+          {!ttsAvailable && (
+            <span className="text-[10px] text-amber-600 bg-amber-50 border border-amber-200 rounded px-1.5 py-0.5">
+              voice off — add OPENAI_API_KEY
+            </span>
+          )}
         </div>
         <button
           type="button"
           onClick={() => {
-            window.speechSynthesis?.cancel();
+            audioRef.current?.pause();
             onClose();
           }}
           className="text-violet-400 hover:text-violet-700 transition-colors"
-          aria-label="Close AI interview"
+          aria-label="Close"
         >
           <X className="h-4 w-4" />
         </button>
       </div>
 
-      {/* Conversation transcript */}
+      {/* Conversation */}
       <div className="max-h-52 overflow-y-auto px-3.5 py-3 space-y-2.5">
         {messages.length === 0 && voiceState === "ai_thinking" && (
           <div className="flex items-center gap-2 text-xs text-muted-foreground">
             <Loader2 className="h-3.5 w-3.5 animate-spin text-violet-500" />
-            Preparing your first question…
+            Starting your interview…
           </div>
         )}
 
         {messages.map((msg, i) => (
-          <div
-            key={i}
-            className={cn(
-              "flex gap-2",
-              msg.role === "user" ? "justify-end" : "justify-start"
-            )}
-          >
+          <div key={i} className={cn("flex gap-2", msg.role === "user" ? "justify-end" : "justify-start")}>
             {msg.role === "assistant" && (
               <div className="shrink-0 h-5 w-5 rounded bg-violet-100 flex items-center justify-center mt-0.5">
                 <Bot className="h-3 w-3 text-violet-600" />
@@ -941,7 +980,7 @@ function AiChatPanel({
           </div>
         ))}
 
-        {(voiceState === "ai_thinking" && messages.length > 0) && (
+        {voiceState === "ai_thinking" && messages.length > 0 && (
           <div className="flex items-center gap-2">
             <div className="h-5 w-5 rounded bg-violet-100 flex items-center justify-center">
               <Bot className="h-3 w-3 text-violet-600" />
@@ -959,79 +998,80 @@ function AiChatPanel({
         <div ref={bottomRef} />
       </div>
 
-      {/* Note update suggestion */}
+      {/* Note update card */}
       {pendingNoteUpdate && (
         <div className="mx-3.5 mb-3 rounded-lg border border-violet-200 bg-white p-3 space-y-2">
           <div className="flex items-center gap-1.5 text-xs font-semibold text-violet-700">
             <Sparkles className="h-3.5 w-3.5" />
             Suggested note update
           </div>
-          <p className="text-xs text-muted-foreground leading-relaxed line-clamp-3">
-            {pendingNoteUpdate}
-          </p>
+          <p className="text-xs text-muted-foreground leading-relaxed line-clamp-3">{pendingNoteUpdate}</p>
           <div className="flex gap-2">
-            <Button
-              type="button"
-              size="sm"
-              className="h-7 text-xs gap-1.5 bg-violet-600 hover:bg-violet-700"
-              onClick={applyNote}
-            >
-              <Check className="h-3 w-3" />
-              Apply to note
+            <Button type="button" size="sm" className="h-7 text-xs gap-1.5 bg-violet-600 hover:bg-violet-700" onClick={applyNote}>
+              <Check className="h-3 w-3" /> Apply to note
             </Button>
-            <Button
-              type="button"
-              size="sm"
-              variant="ghost"
-              className="h-7 text-xs text-muted-foreground"
-              onClick={() => setPendingNoteUpdate(null)}
-            >
+            <Button type="button" size="sm" variant="ghost" className="h-7 text-xs text-muted-foreground" onClick={() => setPendingNoteUpdate(null)}>
               Dismiss
             </Button>
           </div>
         </div>
       )}
 
-      {/* Voice CTA */}
+      {/* Voice control */}
       <div className="border-t border-violet-200 bg-white px-3.5 py-4 flex flex-col items-center gap-3">
-        {micError && (
-          <p className="text-xs text-destructive text-center">{micError}</p>
-        )}
+        {statusMsg && <p className="text-xs text-destructive text-center">{statusMsg}</p>}
 
-        {/* Big mic / status button */}
-        <div className="flex flex-col items-center gap-1.5">
+        {/* Central mic / state button */}
+        <div className="flex flex-col items-center gap-2">
           <button
             type="button"
             disabled={isProcessing}
-            onClick={voiceState === "recording" ? stopRecording : startRecording}
-            aria-label={voiceState === "recording" ? "Stop recording" : "Start recording"}
+            onClick={
+              isSpeaking
+                ? interruptAndRecord
+                : voiceState === "recording"
+                ? stopRecording
+                : startRecording
+            }
+            aria-label={micLabel}
             className={cn(
-              "relative flex items-center justify-center rounded-full transition-all duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-violet-400",
+              "relative flex items-center justify-center rounded-full transition-all duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-violet-500",
               voiceState === "recording"
-                ? "h-16 w-16 bg-red-500 hover:bg-red-600 shadow-lg shadow-red-200"
-                : voiceState === "speaking"
-                ? "h-16 w-16 bg-violet-200 cursor-default"
+                ? "h-20 w-20 bg-red-500 hover:bg-red-600 shadow-lg shadow-red-200"
+                : isSpeaking
+                ? "h-20 w-20 bg-violet-500 hover:bg-violet-600 shadow-lg shadow-violet-200 cursor-pointer"
                 : isProcessing
-                ? "h-16 w-16 bg-violet-100 cursor-wait"
-                : "h-16 w-16 bg-violet-600 hover:bg-violet-700 shadow-md shadow-violet-200"
+                ? "h-20 w-20 bg-violet-100 cursor-wait"
+                : "h-20 w-20 bg-violet-600 hover:bg-violet-700 shadow-md shadow-violet-200"
             )}
           >
+            {/* Pulse rings */}
             {voiceState === "recording" && (
-              <span className="absolute inset-0 rounded-full bg-red-400 animate-ping opacity-40" />
+              <>
+                <span className="absolute inset-0 rounded-full bg-red-400 animate-ping opacity-30" />
+                <span className="absolute -inset-2 rounded-full border-2 border-red-300 animate-ping opacity-20 [animation-delay:0.3s]" />
+              </>
             )}
+            {isSpeaking && (
+              <span className="absolute inset-0 rounded-full bg-violet-400 animate-ping opacity-25" />
+            )}
+
             {isProcessing ? (
-              <Loader2 className="h-7 w-7 text-violet-500 animate-spin" />
-            ) : voiceState === "speaking" ? (
-              <Volume2 className="h-7 w-7 text-violet-500" />
+              <Loader2 className="h-8 w-8 text-violet-400 animate-spin" />
+            ) : isSpeaking ? (
+              <Volume2 className="h-8 w-8 text-white" />
             ) : voiceState === "recording" ? (
-              <Square className="h-6 w-6 text-white fill-white" />
+              <Square className="h-7 w-7 text-white fill-white" />
             ) : (
-              <Mic className="h-7 w-7 text-white" />
+              <Mic className="h-8 w-8 text-white" />
             )}
           </button>
-          <span className="text-[11px] text-muted-foreground font-medium">
-            {voiceStateLabel[voiceState]}
-          </span>
+
+          <span className="text-xs text-muted-foreground font-medium tracking-wide">{micLabel}</span>
+
+          {isSpeaking && (
+            <span className="text-[11px] text-violet-500">tap to interrupt</span>
+          )}
         </div>
 
         {/* Text fallback */}
@@ -1040,8 +1080,13 @@ function AiChatPanel({
             ref={textInputRef}
             value={textInput}
             onChange={(e) => setTextInput(e.target.value)}
-            onKeyDown={handleKeyDown}
-            placeholder="Or type your response… (Enter to send)"
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && !e.shiftKey) {
+                e.preventDefault();
+                submitMessage(textInput, false);
+              }
+            }}
+            placeholder="Or type your answer… (Enter to send)"
             rows={2}
             disabled={isProcessing || voiceState === "recording"}
             className="flex-1 resize-none text-xs rounded-md border border-input bg-background px-2.5 py-2 focus:outline-none focus:ring-1 focus:ring-violet-400 disabled:opacity-40"
@@ -1050,7 +1095,7 @@ function AiChatPanel({
             type="button"
             size="icon"
             disabled={isProcessing || voiceState === "recording" || !textInput.trim()}
-            onClick={handleTextSend}
+            onClick={() => submitMessage(textInput, false)}
             className="h-8 w-8 shrink-0 bg-violet-600 hover:bg-violet-700"
           >
             <Send className="h-3.5 w-3.5" />
