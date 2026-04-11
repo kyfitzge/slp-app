@@ -289,11 +289,13 @@ function VoiceCapture({
   hasExistingContent,
   onTranscript,
   onTalkToAI,
+  onRegenerate,
 }: {
   sessionId: string;
   hasExistingContent: boolean;
   onTranscript: (text: string, mode: TranscriptMode) => void;
   onTalkToAI?: () => void;
+  onRegenerate?: () => void;
 }) {
   const [state, setState] = useState<VoiceState>("idle");
   const [elapsed, setElapsed] = useState(0);
@@ -366,11 +368,11 @@ function VoiceCapture({
 
   return (
     <div className="space-y-3">
-      {/* IDLE / ERROR — two clean action buttons with descriptions */}
+      {/* IDLE / ERROR — action buttons with descriptions */}
       {(state === "idle" || state === "error") && (
-        <div className="flex gap-3">
+        <div className="grid grid-cols-2 gap-3">
           {/* Record summary */}
-          <div className="flex-1 flex flex-col gap-1.5">
+          <div className="flex flex-col gap-1.5">
             <Button
               type="button"
               size="sm"
@@ -389,7 +391,7 @@ function VoiceCapture({
 
           {/* Talk to AI */}
           {onTalkToAI && (
-            <div className="flex-1 flex flex-col gap-1.5">
+            <div className="flex flex-col gap-1.5">
               <Button
                 type="button"
                 size="sm"
@@ -402,6 +404,42 @@ function VoiceCapture({
               </Button>
               <p className="text-[11px] text-muted-foreground text-center leading-snug">
                 AI interviews you with guided questions to fill in your note.
+              </p>
+            </div>
+          )}
+
+          {/* Add Information */}
+          <div className="flex flex-col gap-1.5">
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              onClick={() => startRecording("append")}
+              className="w-full gap-2 justify-center"
+            >
+              <PlusCircle className="h-3.5 w-3.5" />
+              Add information
+            </Button>
+            <p className="text-[11px] text-muted-foreground text-center leading-snug">
+              Record additional context to expand the existing note.
+            </p>
+          </div>
+
+          {/* Regenerate with AI */}
+          {onRegenerate && (
+            <div className="flex flex-col gap-1.5">
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                onClick={onRegenerate}
+                className="w-full gap-2 justify-center"
+              >
+                <RefreshCw className="h-3.5 w-3.5" />
+                Regenerate with AI
+              </Button>
+              <p className="text-[11px] text-muted-foreground text-center leading-snug">
+                Re-draft the note using your existing goal data.
               </p>
             </div>
           )}
@@ -1573,6 +1611,7 @@ export function SessionNotePage({
                 hasExistingContent={!!noteDraft.trim()}
                 onTranscript={handleVoiceTranscript}
                 onTalkToAI={() => setShowAiChat(true)}
+                onRegenerate={() => generateNote()}
               />
 
               {/* AI Chat Panel */}
