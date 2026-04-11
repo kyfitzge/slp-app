@@ -46,30 +46,31 @@ const CUEING_LABELS: Record<string, string> = {
 };
 
 function buildPrompt(body: GenerateNoteBody): string {
-  const lines: string[] = [];
-
-  if (body.sessionDate) lines.push(`Session date: ${body.sessionDate}`);
-  if (body.sessionType) lines.push(`Session type: ${body.sessionType.replace(/_/g, " ").toLowerCase()}`);
-  if (body.durationMins) lines.push(`Duration: ${body.durationMins} minutes`);
-
-  if (body.attendance?.length) {
-    lines.push("\nATTENDANCE:");
-    for (const a of body.attendance) {
-      const statusLabel = a.status
-        .replace(/_/g, " ")
-        .replace(/\b\w/g, (c) => c.toUpperCase());
-      lines.push(`  - ${a.name}: ${statusLabel}`);
-    }
-  }
-
   const presentStudents = (body.attendance ?? [])
     .filter((a) => a.status === "PRESENT" || a.status === "MAKEUP")
     .map((a) => a.name);
 
+  const absentStudents = (body.attendance ?? [])
+    .filter((a) => a.status !== "PRESENT" && a.status !== "MAKEUP")
+    .map((a) => a.name);
+
+  const lines: string[] = [];
+
+  if (body.sessionDate) lines.push(`Date: ${body.sessionDate}`);
+  if (body.sessionType) {
+    const typeLabel = body.sessionType
+      .replace(/_/g, " ")
+      .replace(/\b\w/g, (c) => c.toUpperCase());
+    lines.push(`Session type: ${typeLabel}`);
+  }
+  if (body.durationMins) lines.push(`Duration: ${body.durationMins} minutes`);
+  if (presentStudents.length) lines.push(`Student(s) present: ${presentStudents.join(", ")}`);
+  if (absentStudents.length) lines.push(`Student(s) absent: ${absentStudents.join(", ")}`);
+
   if (body.goals?.length) {
-    lines.push("\nGOALS ADDRESSED:");
+    lines.push("\nACTIVE IEP GOALS (with available performance data):");
     for (const g of body.goals) {
-      const parts: string[] = [`  - ${g.name}`];
+      const parts: string[] = [`  • ${g.name}`];
       if (g.trialsCorrect != null && g.trialsTotal != null) {
         parts.push(`${g.trialsCorrect}/${g.trialsTotal} trials`);
       }
@@ -79,34 +80,66 @@ function buildPrompt(body: GenerateNoteBody): string {
       if (g.cueingLevel && CUEING_LABELS[g.cueingLevel]) {
         parts.push(CUEING_LABELS[g.cueingLevel]);
       }
-      lines.push(parts.join(", "));
+      lines.push(parts.join(" — "));
     }
   }
 
   if (body.summaryText?.trim()) {
-    lines.push(`\nSLP SUMMARY:\n"${body.summaryText.trim()}"`);
+    lines.push(`\nSLP'S RAW SESSION RECAP:\n"${body.summaryText.trim()}"`);
   }
 
   const dataBlock = lines.join("\n");
 
-  return `You are a clinical documentation assistant for a school-based Speech-Language Pathologist.
+  // Absence-only path
+  if (absentStudents.length > 0 && presentStudents.length === 0) {
+    return `You are a clinical documentation assistant for a school-based SLP.
 
-Your task is to write a concise, professional session note based ONLY on the session data below.
-
-CRITICAL RULES:
-1. Write in past tense, professional clinical prose
-2. ONLY use information explicitly provided — do NOT invent, infer, or elaborate beyond what is given
-3. Keep it concise: 2–4 sentences, max 2 short paragraphs. School SLP notes are brief.
-4. Do NOT use headers, bullet points, or markdown — plain prose only
-5. If a student was absent or session was cancelled, write a brief compliant absence note instead
-6. Integrate the SLP's spoken/written summary naturally if provided
-7. Do not repeat raw numbers if the summary already covers them well
-8. End with a brief plan if next steps can be inferred from the data
+Write a brief, compliant session absence note (1–2 sentences, past tense, professional).
 
 SESSION DATA:
 ${dataBlock}
 
-Write the session note now. Output ONLY the note text — no preamble, no labels, no JSON.`;
+Output ONLY the note text.`;
+  }
+
+  return `You are a documentation specialist for a school-based Speech-Language Pathologist (SLP).
+
+Your task: transform the SLP's raw session recap into a polished, professional clinical session note suitable for IEP documentation.
+
+═══ SESSION DATA ═══
+${dataBlock}
+
+═══ INSTRUCTIONS ═══
+
+The SLP's raw recap is your primary source. Extract every clinically meaningful detail and rewrite it as a professional note.
+
+TRANSFORMATION RULES:
+1. Normalize informal language to standard clinical terminology:
+   — "needed a lot of help" / "had to give lots of cues" → "maximal verbal cues" or "direct verbal cues with modeling"
+   — "did great" / "nailed it" (no numbers) → "demonstrated emerging accuracy" or "responded well to treatment"
+   — "his usual sounds" / "her goals" → reference the listed IEP goals by name
+   — "a few tries" / "most of the time" → use conservatively (e.g., "majority of attempts" or "inconsistent accuracy")
+   — "we did ___" → "[Student name] practiced ___ through [activity description]"
+2. Use any structured goal data (accuracy %, trials, cueing level) to ground performance descriptions — do not repeat numbers verbatim if the recap already describes them well
+3. Infer reasonable clinical details from informal descriptions (e.g., "used flashcards" → "structured drill using picture stimuli")
+4. Do NOT fabricate specific numbers that are not present in the data or recap
+5. Use the student's first name throughout — not "the student"
+6. Include a brief plan statement if next steps are mentioned or clearly implied
+
+NOTE FORMAT — 2–4 paragraphs of narrative prose:
+  Paragraph 1 — Session overview: who was seen, session type and duration, goals or skill areas addressed, activities and tasks used
+  Paragraph 2 — Performance: accuracy, trials, or qualitative description; cueing level and student's response to cues
+  Paragraph 3 (if warranted) — Participation, engagement, behavioral observations, or notable clinical observations
+  Closing sentence — Plan for next session (if inferable)
+
+STYLE RULES:
+  — Past tense throughout
+  — No headers, bullets, or markdown — plain prose only
+  — Professional, objective, clinically appropriate — no filler, no AI-sounding phrases
+  — Every sentence should carry clinical value
+  — Read like something an experienced SLP would actually write
+
+Output ONLY the note text — no preamble, no labels, no JSON.`;
 }
 
 export async function POST(
@@ -144,7 +177,7 @@ export async function POST(
 
     const message = await client.messages.create({
       model: process.env.LLM_NOTE_MODEL ?? "claude-haiku-4-5",
-      max_tokens: 600,
+      max_tokens: 900,
       messages: [{ role: "user", content: buildPrompt(body) }],
     });
 
