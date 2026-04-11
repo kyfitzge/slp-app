@@ -71,6 +71,7 @@ const FIELD_LABELS: Record<string, string> = {
 interface ChatMessage {
   role: "user" | "assistant";
   content: string;
+  kind?: "update"; // auto-applied IEP field notification
 }
 
 // ─── IEPTextChatPanel ─────────────────────────────────────────────────────────
@@ -103,7 +104,6 @@ function IEPTextChatPanel({
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [textInput, setTextInput] = useState("");
   const [isThinking, setIsThinking] = useState(true);
-  const [pendingIepUpdate, setPendingIepUpdate] = useState<Partial<Record<PLAAFPKey | "parentConcerns", string>> | null>(null);
 
   const initRef = useRef(false);
   const bottomRef = useRef<HTMLDivElement>(null);
@@ -172,7 +172,18 @@ function IEPTextChatPanel({
 
       const aiMsg: ChatMessage = { role: "assistant", content: json.reply };
       setMessages((prev) => [...prev, aiMsg]);
-      if (json.iepUpdate) setPendingIepUpdate(json.iepUpdate);
+
+      // Auto-apply field updates immediately — no manual Apply step needed
+      if (json.iepUpdate && Object.keys(json.iepUpdate).length > 0) {
+        onApplyFields(json.iepUpdate);
+        const appliedLabels = Object.keys(json.iepUpdate)
+          .map((k) => FIELD_LABELS[k] ?? k)
+          .join(", ");
+        setMessages((prev) => [
+          ...prev,
+          { role: "assistant", content: `Applied to IEP: ${appliedLabels}`, kind: "update" },
+        ]);
+      }
     } catch {
       setMessages((prev) => [
         ...prev,
@@ -191,18 +202,7 @@ function IEPTextChatPanel({
     const newHistory = [...messages, userMsg];
     setMessages(newHistory);
     setTextInput("");
-    setPendingIepUpdate(null);
     sendToAI(newHistory);
-  }
-
-  function applyFields() {
-    if (!pendingIepUpdate) return;
-    onApplyFields(pendingIepUpdate as Record<string, string>);
-    setPendingIepUpdate(null);
-    setMessages((prev) => [
-      ...prev,
-      { role: "assistant", content: "IEP fields updated. Is there anything else to add?" },
-    ]);
   }
 
   return (
@@ -236,21 +236,31 @@ function IEPTextChatPanel({
 
         {messages.map((msg, i) => (
           <div key={i} className={cn("flex gap-2", msg.role === "user" ? "justify-end" : "justify-start")}>
-            {msg.role === "assistant" && (
-              <div className="shrink-0 h-5 w-5 rounded bg-violet-100 flex items-center justify-center mt-0.5">
-                <Bot className="h-3 w-3 text-violet-600" />
+            {/* "Applied to IEP" update notification — inline, no bubble */}
+            {msg.kind === "update" ? (
+              <div className="flex items-center gap-1.5 text-[11px] text-emerald-600 pl-7">
+                <Check className="h-3 w-3 shrink-0" />
+                <span>{msg.content}</span>
               </div>
+            ) : (
+              <>
+                {msg.role === "assistant" && (
+                  <div className="shrink-0 h-5 w-5 rounded bg-violet-100 flex items-center justify-center mt-0.5">
+                    <Bot className="h-3 w-3 text-violet-600" />
+                  </div>
+                )}
+                <div
+                  className={cn(
+                    "max-w-[85%] rounded-xl px-3 py-2 text-xs leading-relaxed",
+                    msg.role === "user"
+                      ? "bg-primary text-primary-foreground rounded-br-sm"
+                      : "bg-white border border-violet-100 text-foreground rounded-bl-sm shadow-sm"
+                  )}
+                >
+                  {msg.content}
+                </div>
+              </>
             )}
-            <div
-              className={cn(
-                "max-w-[85%] rounded-xl px-3 py-2 text-xs leading-relaxed",
-                msg.role === "user"
-                  ? "bg-primary text-primary-foreground rounded-br-sm"
-                  : "bg-white border border-violet-100 text-foreground rounded-bl-sm shadow-sm"
-              )}
-            >
-              {msg.content}
-            </div>
           </div>
         ))}
 
@@ -272,40 +282,7 @@ function IEPTextChatPanel({
         <div ref={bottomRef} />
       </div>
 
-      {/* IEP update card */}
-      {pendingIepUpdate && (
-        <div className="mx-3.5 mb-3 rounded-lg border border-violet-200 bg-white p-3 space-y-2 shrink-0">
-          <div className="flex items-center gap-1.5 text-xs font-semibold text-violet-700">
-            <Sparkles className="h-3.5 w-3.5" />
-            Apply to IEP
-          </div>
-          <div className="space-y-1">
-            {Object.entries(pendingIepUpdate).map(([key, value]) => (
-              <div key={key} className="text-xs">
-                <span className="font-medium text-foreground">{FIELD_LABELS[key] ?? key}: </span>
-                <span className="text-muted-foreground line-clamp-1">{value}</span>
-              </div>
-            ))}
-          </div>
-          <div className="flex gap-2">
-            <Button
-              type="button"
-              size="sm"
-              className="h-7 text-xs gap-1.5 bg-violet-600 hover:bg-violet-700"
-              onClick={applyFields}
-            >
-              <Check className="h-3 w-3" /> Apply
-            </Button>
-            <Button
-              type="button"
-              size="sm"
-              variant="ghost"
-              className="h-7 text-xs text-muted-foreground"
-              onClick={() => setPendingIepUpdate(null)}
-            >
-              Dismiss
-            </Button>
-          </div>
+      {/* (no manual Apply card — fields are auto-applied)
         </div>
       )}
 
@@ -378,7 +355,6 @@ function IEPVoiceChatPanel({
 }) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [voiceState, setVoiceState] = useState<AiVoiceState>("ai_thinking");
-  const [pendingIepUpdate, setPendingIepUpdate] = useState<Partial<Record<PLAAFPKey | "parentConcerns", string>> | null>(null);
   const [statusMsg, setStatusMsg] = useState<string | null>(null);
   const [ttsAvailable, setTtsAvailable] = useState(true);
 
@@ -589,7 +565,16 @@ function IEPVoiceChatPanel({
       const aiMsg: ChatMessage = { role: "assistant", content: json.reply };
       setMessages((prev) => [...prev, aiMsg]);
 
-      if (json.iepUpdate) setPendingIepUpdate(json.iepUpdate);
+      if (json.iepUpdate && Object.keys(json.iepUpdate).length > 0) {
+        onApplyFields(json.iepUpdate);
+        const appliedLabels = Object.keys(json.iepUpdate)
+          .map((k) => FIELD_LABELS[k] ?? k)
+          .join(", ");
+        setMessages((prev) => [
+          ...prev,
+          { role: "assistant", content: `Applied to IEP: ${appliedLabels}`, kind: "update" },
+        ]);
+      }
 
       if (speakResponse && json.reply) {
         await playTTS(json.reply, { thenRecord: ttsAvailable });
@@ -612,19 +597,8 @@ function IEPVoiceChatPanel({
     const userMsg: ChatMessage = { role: "user", content: trimmed };
     const newHistory = [...messages, userMsg];
     setMessages(newHistory);
-    setPendingIepUpdate(null);
     setStatusMsg(null);
     sendToAI(newHistory, speakResponse);
-  }
-
-  function applyFields() {
-    if (!pendingIepUpdate) return;
-    onApplyFields(pendingIepUpdate as Record<string, string>);
-    setPendingIepUpdate(null);
-    setMessages((prev) => [
-      ...prev,
-      { role: "assistant", content: "IEP fields updated. Is there anything else to add?" },
-    ]);
   }
 
   const isProcessing = voiceState === "transcribing" || voiceState === "ai_thinking";
@@ -675,25 +649,37 @@ function IEPVoiceChatPanel({
           </div>
         )}
 
-        {messages.map((msg, i) => (
-          <div key={i} className={cn("flex gap-2", msg.role === "user" ? "justify-end" : "justify-start")}>
-            {msg.role === "assistant" && (
-              <div className="shrink-0 h-5 w-5 rounded bg-violet-100 flex items-center justify-center mt-0.5">
-                <Bot className="h-3 w-3 text-violet-600" />
+        {messages.map((msg, i) => {
+          if (msg.kind === "update") {
+            return (
+              <div key={i} className="flex justify-center">
+                <span className="inline-flex items-center gap-1 text-[11px] text-emerald-600 bg-emerald-50 border border-emerald-200 rounded-full px-2.5 py-0.5">
+                  <Check className="h-3 w-3" />
+                  {msg.content}
+                </span>
               </div>
-            )}
-            <div
-              className={cn(
-                "max-w-[85%] rounded-xl px-3 py-2 text-xs leading-relaxed",
-                msg.role === "user"
-                  ? "bg-primary text-primary-foreground rounded-br-sm"
-                  : "bg-white border border-violet-100 text-foreground rounded-bl-sm shadow-sm"
+            );
+          }
+          return (
+            <div key={i} className={cn("flex gap-2", msg.role === "user" ? "justify-end" : "justify-start")}>
+              {msg.role === "assistant" && (
+                <div className="shrink-0 h-5 w-5 rounded bg-violet-100 flex items-center justify-center mt-0.5">
+                  <Bot className="h-3 w-3 text-violet-600" />
+                </div>
               )}
-            >
-              {msg.content}
+              <div
+                className={cn(
+                  "max-w-[85%] rounded-xl px-3 py-2 text-xs leading-relaxed",
+                  msg.role === "user"
+                    ? "bg-primary text-primary-foreground rounded-br-sm"
+                    : "bg-white border border-violet-100 text-foreground rounded-bl-sm shadow-sm"
+                )}
+              >
+                {msg.content}
+              </div>
             </div>
-          </div>
-        ))}
+          );
+        })}
 
         {voiceState === "ai_thinking" && messages.length > 0 && (
           <div className="flex items-center gap-2">
@@ -712,43 +698,6 @@ function IEPVoiceChatPanel({
 
         <div ref={bottomRef} />
       </div>
-
-      {/* IEP update card */}
-      {pendingIepUpdate && (
-        <div className="mx-3.5 mb-3 rounded-lg border border-violet-200 bg-white p-3 space-y-2 shrink-0">
-          <div className="flex items-center gap-1.5 text-xs font-semibold text-violet-700">
-            <Sparkles className="h-3.5 w-3.5" />
-            Apply to IEP
-          </div>
-          <div className="space-y-1">
-            {Object.entries(pendingIepUpdate).map(([key, value]) => (
-              <div key={key} className="text-xs">
-                <span className="font-medium text-foreground">{FIELD_LABELS[key] ?? key}: </span>
-                <span className="text-muted-foreground line-clamp-1">{value}</span>
-              </div>
-            ))}
-          </div>
-          <div className="flex gap-2">
-            <Button
-              type="button"
-              size="sm"
-              className="h-7 text-xs gap-1.5 bg-violet-600 hover:bg-violet-700"
-              onClick={applyFields}
-            >
-              <Check className="h-3 w-3" /> Apply
-            </Button>
-            <Button
-              type="button"
-              size="sm"
-              variant="ghost"
-              className="h-7 text-xs text-muted-foreground"
-              onClick={() => setPendingIepUpdate(null)}
-            >
-              Dismiss
-            </Button>
-          </div>
-        </div>
-      )}
 
       {/* Voice control */}
       <div className="border-t border-violet-200 bg-white px-3.5 py-4 flex flex-col items-center gap-3 shrink-0">

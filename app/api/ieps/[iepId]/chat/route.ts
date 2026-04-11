@@ -225,17 +225,38 @@ export async function POST(
     let reply = fullText;
     let iepUpdate: Record<string, string> | null = null;
 
+    // Default questions used when Claude omits the question before IEP_UPDATE
+    const defaultQuestions: Record<string, string> = {
+      strengths:            `What are ${context.studentName}'s communication strengths?`,
+      areasOfNeed:          `What specific communication difficulties does ${context.studentName} present with?`,
+      functionalImpact:     `How do ${context.studentName}'s communication difficulties affect participation in class or daily activities?`,
+      baselinePerformance:  `What assessment data or probe results do you have for ${context.studentName}?`,
+      communicationProfile: `How would you describe ${context.studentName}'s overall communication — intelligibility, language level, and pragmatic skills?`,
+      parentConcerns:       `What concerns have ${context.studentName}'s parents expressed about communication at home or in the community?`,
+    };
+
     if (iepUpdateIdx !== -1) {
       const jsonStr = fullText.slice(iepUpdateIdx + iepUpdateMarker.length).trim();
       reply = fullText.slice(0, iepUpdateIdx).trim();
-      if (!reply) {
-        reply = "Got it — applying the captured information to your IEP.";
-      }
       try {
         iepUpdate = JSON.parse(jsonStr);
       } catch {
-        // Malformed JSON — ignore the update silently
         iepUpdate = null;
+      }
+
+      // If Claude forgot to write a question before IEP_UPDATE, generate one
+      // server-side using the remaining empty fields from the context.
+      if (!reply) {
+        const justCaptured = new Set(Object.keys(iepUpdate ?? {}));
+        const remaining = (context.fieldStatus ?? []).filter(
+          (f) => (f.quality === "empty" || f.quality === "partial") && !justCaptured.has(f.key)
+        );
+        if (remaining.length > 0) {
+          reply = defaultQuestions[remaining[0].key]
+            ?? `Can you tell me about ${remaining[0].label.toLowerCase()} for ${context.studentName}?`;
+        } else {
+          reply = "I've captured all the key information for the IEP. Does anything need to be adjusted?";
+        }
       }
     }
 
