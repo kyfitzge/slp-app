@@ -83,6 +83,10 @@ function IEPTextChatPanel({
   goals,
   onClose,
   onApplyFields,
+  serviceMinutesPerWeek,
+  individualMinutes,
+  groupMinutes,
+  serviceLocation,
 }: {
   iepId: string;
   studentName: string;
@@ -91,6 +95,10 @@ function IEPTextChatPanel({
   goals: IEPGoal[];
   onClose: () => void;
   onApplyFields: (fields: Record<string, string>) => void;
+  serviceMinutesPerWeek?: number;
+  individualMinutes?: number;
+  groupMinutes?: number;
+  serviceLocation?: string;
 }) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [textInput, setTextInput] = useState("");
@@ -113,21 +121,38 @@ function IEPTextChatPanel({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  function fieldQuality(content?: string): "empty" | "partial" | "complete" {
+    if (!content?.trim()) return "empty";
+    return content.trim().length < 60 ? "partial" : "complete";
+  }
+
   function buildContext() {
+    const makeField = (label: string, key: string, value?: string) => ({
+      label,
+      key,
+      quality: fieldQuality(value),
+      preview: value?.trim().slice(0, 120) || undefined,
+    });
+
     return {
       studentName,
-      currentFields: {
-        strengths: plaafp.strengths,
-        areasOfNeed: plaafp.areasOfNeed,
-        functionalImpact: plaafp.functionalImpact,
-        baselinePerformance: plaafp.baselinePerformance,
-        communicationProfile: plaafp.communicationProfile,
-        parentConcerns,
-      },
+      serviceMinutesPerWeek,
+      individualMinutes,
+      groupMinutes,
+      serviceLocation,
+      fieldStatus: [
+        makeField("Strengths",            "strengths",            plaafp.strengths),
+        makeField("Areas of Need",        "areasOfNeed",          plaafp.areasOfNeed),
+        makeField("Functional Impact",    "functionalImpact",     plaafp.functionalImpact),
+        makeField("Baseline Performance", "baselinePerformance",  plaafp.baselinePerformance),
+        makeField("Communication Profile","communicationProfile", plaafp.communicationProfile),
+        makeField("Parent Concerns",      "parentConcerns",       parentConcerns),
+      ],
       goals: goals.map((g) => ({
         name: g.shortName ?? g.goalText.slice(0, 60),
         domain: g.domain,
         targetAccuracy: g.targetAccuracy,
+        hasDataPoints: g.dataPoints.length > 0,
       })),
     };
   }
@@ -332,6 +357,10 @@ function IEPVoiceChatPanel({
   goals,
   onClose,
   onApplyFields,
+  serviceMinutesPerWeek,
+  individualMinutes,
+  groupMinutes,
+  serviceLocation,
 }: {
   iepId: string;
   studentName: string;
@@ -340,6 +369,10 @@ function IEPVoiceChatPanel({
   goals: IEPGoal[];
   onClose: () => void;
   onApplyFields: (fields: Record<string, string>) => void;
+  serviceMinutesPerWeek?: number;
+  individualMinutes?: number;
+  groupMinutes?: number;
+  serviceLocation?: string;
 }) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [voiceState, setVoiceState] = useState<AiVoiceState>("ai_thinking");
@@ -376,21 +409,38 @@ function IEPVoiceChatPanel({
     };
   }, []);
 
+  function fieldQuality(content?: string): "empty" | "partial" | "complete" {
+    if (!content?.trim()) return "empty";
+    return content.trim().length < 60 ? "partial" : "complete";
+  }
+
   function buildContext() {
+    const makeField = (label: string, key: string, value?: string) => ({
+      label,
+      key,
+      quality: fieldQuality(value),
+      preview: value?.trim().slice(0, 120) || undefined,
+    });
+
     return {
       studentName,
-      currentFields: {
-        strengths: plaafp.strengths,
-        areasOfNeed: plaafp.areasOfNeed,
-        functionalImpact: plaafp.functionalImpact,
-        baselinePerformance: plaafp.baselinePerformance,
-        communicationProfile: plaafp.communicationProfile,
-        parentConcerns,
-      },
+      serviceMinutesPerWeek,
+      individualMinutes,
+      groupMinutes,
+      serviceLocation,
+      fieldStatus: [
+        makeField("Strengths",            "strengths",            plaafp.strengths),
+        makeField("Areas of Need",        "areasOfNeed",          plaafp.areasOfNeed),
+        makeField("Functional Impact",    "functionalImpact",     plaafp.functionalImpact),
+        makeField("Baseline Performance", "baselinePerformance",  plaafp.baselinePerformance),
+        makeField("Communication Profile","communicationProfile", plaafp.communicationProfile),
+        makeField("Parent Concerns",      "parentConcerns",       parentConcerns),
+      ],
       goals: goals.map((g) => ({
         name: g.shortName ?? g.goalText.slice(0, 60),
         domain: g.domain,
         targetAccuracy: g.targetAccuracy,
+        hasDataPoints: g.dataPoints.length > 0,
       })),
     };
   }
@@ -998,6 +1048,10 @@ export function IEPPageClient({
               goals={iep.goals}
               onClose={() => setRightPanel("goals")}
               onApplyFields={onApplyFields}
+              serviceMinutesPerWeek={iep.minutesPerWeek}
+              individualMinutes={iep.individualMinutes}
+              groupMinutes={iep.groupMinutes}
+              serviceLocation={iep.serviceLocation}
             />
           )}
 
@@ -1010,6 +1064,10 @@ export function IEPPageClient({
               goals={iep.goals}
               onClose={() => setRightPanel("goals")}
               onApplyFields={onApplyFields}
+              serviceMinutesPerWeek={iep.minutesPerWeek}
+              individualMinutes={iep.individualMinutes}
+              groupMinutes={iep.groupMinutes}
+              serviceLocation={iep.serviceLocation}
             />
           )}
 
