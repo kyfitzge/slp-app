@@ -382,7 +382,7 @@ function VoiceCapture({
     <div className="space-y-3">
 
       {/* ── EMPTY STATE: no note yet — Record Summary + Talk to AI ── */}
-      {!hasExistingContent && (state === "idle" || state === "error") && (
+      {!hasExistingContent && !isRecordingAny && state !== "processing" && (
         <div className="grid grid-cols-2 gap-2">
           <Tip tip="Speak a recap and your note will be auto-generated.">
             <Button
@@ -412,7 +412,7 @@ function VoiceCapture({
       )}
 
       {/* ── HAS CONTENT: Re-record + Add information + Regenerate with AI ── */}
-      {hasExistingContent && (state === "idle" || state === "done" || state === "error") && (
+      {hasExistingContent && !isRecordingAny && state !== "processing" && (
         <div className="flex items-center gap-2 flex-wrap">
           <Tip tip="Replace the current note with a new recording.">
             <Button
