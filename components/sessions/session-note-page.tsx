@@ -303,6 +303,7 @@ function VoiceCapture({
   onTranscript,
   onTalkToAI,
   onTextChat,
+  onSuggestEdits,
   onRegenerate,
   onClearNote,
 }: {
@@ -311,6 +312,7 @@ function VoiceCapture({
   onTranscript: (text: string, mode: TranscriptMode) => void;
   onTalkToAI?: () => void;
   onTextChat?: () => void;
+  onSuggestEdits?: () => void;
   onRegenerate?: () => void;
   onClearNote?: () => void;
 }) {
@@ -501,6 +503,21 @@ function VoiceCapture({
               >
                 <MessageSquare className="h-3.5 w-3.5" />
                 Chat with AI
+              </Button>
+            </Tip>
+          )}
+
+          {onSuggestEdits && (
+            <Tip tip="Describe changes and AI will edit the draft for you.">
+              <Button
+                type="button"
+                size="sm"
+                variant="ghost"
+                onClick={onSuggestEdits}
+                className="gap-1.5 h-8 text-xs text-violet-500 hover:text-violet-700 hover:bg-violet-50"
+              >
+                <Sparkles className="h-3.5 w-3.5" />
+                Suggest edits
               </Button>
             </Tip>
           )}
@@ -1322,6 +1339,216 @@ function TextChatPanel({
   );
 }
 
+// ─── SuggestEditsPanel ───────────────────────────────────────────────────────
+// Lets the SLP type editing instructions; AI returns the full edited note.
+
+interface EditMessage {
+  role: "user" | "assistant";
+  content: string;
+}
+
+function SuggestEditsPanel({
+  sessionId,
+  currentNote,
+  onClose,
+  onApplyNote,
+}: {
+  sessionId: string;
+  /** Live note draft — updated in parent when user applies an edit. */
+  currentNote: string;
+  onClose: () => void;
+  onApplyNote: (note: string) => void;
+}) {
+  const [messages, setMessages] = useState<EditMessage[]>([]);
+  const [textInput, setTextInput] = useState("");
+  const [isThinking, setIsThinking] = useState(false);
+  const [pendingEdit, setPendingEdit] = useState<string | null>(null);
+  // Track the note state inside the panel so multi-turn edits build on each other
+  const [workingNote, setWorkingNote] = useState(currentNote);
+
+  const bottomRef = useRef<HTMLDivElement>(null);
+  const textInputRef = useRef<HTMLTextAreaElement>(null);
+
+  useEffect(() => {
+    if (messages.length > 0) {
+      bottomRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    }
+  }, [messages, isThinking]);
+
+  async function sendInstruction(text: string) {
+    const trimmed = text.trim();
+    if (!trimmed) return;
+
+    const userMsg: EditMessage = { role: "user", content: trimmed };
+    const newHistory = [...messages, userMsg];
+    setMessages(newHistory);
+    setTextInput("");
+    setPendingEdit(null);
+    setIsThinking(true);
+
+    try {
+      const res = await fetch(`/api/sessions/${sessionId}/edit-note`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ existingNote: workingNote, messages: newHistory }),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error ?? "Edit failed");
+
+      const aiMsg: EditMessage = { role: "assistant", content: json.reply };
+      setMessages((prev) => [...prev, aiMsg]);
+      if (json.editedNote) setPendingEdit(json.editedNote);
+    } catch {
+      setMessages((prev) => [
+        ...prev,
+        { role: "assistant", content: "Sorry, I had trouble applying that edit. Please try again." },
+      ]);
+    } finally {
+      setIsThinking(false);
+      setTimeout(() => textInputRef.current?.focus(), 50);
+    }
+  }
+
+  function applyEdit() {
+    if (!pendingEdit) return;
+    onApplyNote(pendingEdit);
+    setWorkingNote(pendingEdit);
+    setPendingEdit(null);
+    setMessages((prev) => [
+      ...prev,
+      { role: "assistant", content: "Applied. Want to make any other changes?" },
+    ]);
+  }
+
+  return (
+    <div className="rounded-lg border border-violet-200 bg-violet-50/40 overflow-hidden flex flex-col">
+      {/* Header */}
+      <div className="flex items-center justify-between px-3.5 py-2.5 bg-violet-100/60 border-b border-violet-200 shrink-0">
+        <div className="flex items-center gap-2">
+          <div className="flex items-center justify-center h-5 w-5 rounded bg-violet-600/10">
+            <Sparkles className="h-3.5 w-3.5 text-violet-600" />
+          </div>
+          <span className="text-xs font-semibold text-violet-800">Suggest Edits</span>
+        </div>
+        <button
+          type="button"
+          onClick={onClose}
+          className="text-violet-400 hover:text-violet-700 transition-colors"
+          aria-label="Close"
+        >
+          <X className="h-4 w-4" />
+        </button>
+      </div>
+
+      {/* Conversation */}
+      <div className="flex-1 overflow-y-auto min-h-[160px] max-h-[340px] px-3.5 py-3 space-y-2.5">
+        {messages.length === 0 && !isThinking && (
+          <p className="text-xs text-muted-foreground italic">
+            Describe the changes you'd like — e.g. "Make it more concise", "Add that she needed extra prompting on the /r/ goal", or "Remove the participation paragraph."
+          </p>
+        )}
+
+        {messages.map((msg, i) => (
+          <div key={i} className={cn("flex gap-2", msg.role === "user" ? "justify-end" : "justify-start")}>
+            {msg.role === "assistant" && (
+              <div className="shrink-0 h-5 w-5 rounded bg-violet-100 flex items-center justify-center mt-0.5">
+                <Sparkles className="h-3 w-3 text-violet-600" />
+              </div>
+            )}
+            <div
+              className={cn(
+                "max-w-[85%] rounded-xl px-3 py-2 text-xs leading-relaxed",
+                msg.role === "user"
+                  ? "bg-primary text-primary-foreground rounded-br-sm"
+                  : "bg-white border border-violet-100 text-foreground rounded-bl-sm shadow-sm"
+              )}
+            >
+              {msg.content}
+            </div>
+          </div>
+        ))}
+
+        {isThinking && (
+          <div className="flex items-center gap-2">
+            <div className="h-5 w-5 rounded bg-violet-100 flex items-center justify-center">
+              <Sparkles className="h-3 w-3 text-violet-600" />
+            </div>
+            <div className="bg-white border border-violet-100 rounded-xl rounded-bl-sm px-3 py-2 shadow-sm">
+              <span className="flex gap-1">
+                <span className="h-1.5 w-1.5 rounded-full bg-violet-400 animate-bounce [animation-delay:-0.3s]" />
+                <span className="h-1.5 w-1.5 rounded-full bg-violet-400 animate-bounce [animation-delay:-0.15s]" />
+                <span className="h-1.5 w-1.5 rounded-full bg-violet-400 animate-bounce" />
+              </span>
+            </div>
+          </div>
+        )}
+
+        <div ref={bottomRef} />
+      </div>
+
+      {/* Proposed edit card */}
+      {pendingEdit && (
+        <div className="mx-3.5 mb-3 rounded-lg border border-violet-200 bg-white p-3 space-y-2 shrink-0">
+          <div className="flex items-center gap-1.5 text-xs font-semibold text-violet-700">
+            <Sparkles className="h-3.5 w-3.5" />
+            Proposed edit
+          </div>
+          <p className="text-xs text-muted-foreground leading-relaxed line-clamp-4">{pendingEdit}</p>
+          <div className="flex gap-2">
+            <Button
+              type="button"
+              size="sm"
+              className="h-7 text-xs gap-1.5 bg-violet-600 hover:bg-violet-700"
+              onClick={applyEdit}
+            >
+              <Check className="h-3 w-3" /> Apply to note
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              variant="ghost"
+              className="h-7 text-xs text-muted-foreground"
+              onClick={() => setPendingEdit(null)}
+            >
+              Dismiss
+            </Button>
+          </div>
+        </div>
+      )}
+
+      {/* Text input */}
+      <div className="border-t border-violet-200 bg-white px-3.5 py-3 shrink-0">
+        <div className="flex gap-2 items-end">
+          <textarea
+            ref={textInputRef}
+            value={textInput}
+            onChange={(e) => setTextInput(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && !e.shiftKey) {
+                e.preventDefault();
+                sendInstruction(textInput);
+              }
+            }}
+            placeholder="Describe your edit… (Enter to send)"
+            rows={2}
+            disabled={isThinking}
+            className="flex-1 resize-none text-xs rounded-md border border-input bg-background px-2.5 py-2 focus:outline-none focus:ring-1 focus:ring-violet-400 disabled:opacity-40"
+          />
+          <Button
+            type="button"
+            size="icon"
+            disabled={isThinking || !textInput.trim()}
+            onClick={() => sendInstruction(textInput)}
+            className="h-8 w-8 shrink-0 bg-violet-600 hover:bg-violet-700"
+          >
+            <Send className="h-3.5 w-3.5" />
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── Main component ───────────────────────────────────────────────────────────
 
 export function SessionNotePage({
@@ -1593,6 +1820,7 @@ export function SessionNotePage({
   // ── AI Chat ───────────────────────────────────────────────────────────────────
   const [showAiChat, setShowAiChat] = useState(false);
   const [showTextChat, setShowTextChat] = useState(false);
+  const [showSuggestEdits, setShowSuggestEdits] = useState(false);
 
   // ── Note draft (continued) ───────────────────────────────────────────────────
   const [generating, setGenerating] = useState(false);
@@ -1896,11 +2124,11 @@ export function SessionNotePage({
           {/* Split layout: chat panel slides in to the left of the note card */}
           <div className={cn(
             "grid gap-4 items-start transition-[grid-template-columns] duration-300",
-            (showAiChat || showTextChat) ? "grid-cols-1 md:grid-cols-2" : "grid-cols-1"
+            (showAiChat || showTextChat || showSuggestEdits) ? "grid-cols-1 md:grid-cols-2" : "grid-cols-1"
           )}>
 
-            {/* ── AI / Text Chat Panel (left slot) ───────────── */}
-            {(showAiChat || showTextChat) && (
+            {/* ── AI / Text Chat / Suggest Edits Panel (left slot) ── */}
+            {(showAiChat || showTextChat || showSuggestEdits) && (
               <div className="animate-in slide-in-from-left-4 duration-300">
                 {showAiChat ? (
                   <AiChatPanel
@@ -1927,6 +2155,19 @@ export function SessionNotePage({
                     }}
                     onClose={() => setShowAiChat(false)}
                     onApplyNote={(summary) => generateNote(summary)}
+                  />
+                ) : showSuggestEdits ? (
+                  <SuggestEditsPanel
+                    sessionId={sessionId}
+                    currentNote={noteDraft}
+                    onClose={() => setShowSuggestEdits(false)}
+                    onApplyNote={(edited) => {
+                      setNoteDraft(edited);
+                      setNoteExtractionContext(edited);
+                      setGeneratedAt(new Date());
+                      setHasUnsavedChanges(true);
+                      extractStructuredData(edited);
+                    }}
                   />
                 ) : (
                   <TextChatPanel
@@ -1968,7 +2209,7 @@ export function SessionNotePage({
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-semibold">Session Note Draft</p>
                   <p className="text-xs text-muted-foreground">
-                    {(showAiChat || showTextChat)
+                    {(showAiChat || showTextChat || showSuggestEdits)
                       ? "Edit directly or apply suggestions from the AI panel"
                       : "Record your session summary or click Generate to draft from goal data"}
                   </p>
@@ -1986,8 +2227,9 @@ export function SessionNotePage({
                   sessionId={sessionId}
                   hasExistingContent={!!noteDraft.trim()}
                   onTranscript={handleVoiceTranscript}
-                  onTalkToAI={() => { setShowTextChat(false); setShowAiChat((v) => !v); }}
-                  onTextChat={() => { setShowAiChat(false); setShowTextChat((v) => !v); }}
+                  onTalkToAI={() => { setShowTextChat(false); setShowSuggestEdits(false); setShowAiChat((v) => !v); }}
+                  onTextChat={() => { setShowAiChat(false); setShowSuggestEdits(false); setShowTextChat((v) => !v); }}
+                  onSuggestEdits={noteDraft.trim() ? () => { setShowAiChat(false); setShowTextChat(false); setShowSuggestEdits((v) => !v); } : undefined}
                   onRegenerate={() => generateNote()}
                   onClearNote={() => {
                     setNoteDraft("");
@@ -2010,7 +2252,7 @@ export function SessionNotePage({
                         ? "Generating note draft…"
                         : "Record your session above, or click Generate to draft from goal data."
                     }
-                    rows={(showAiChat || showTextChat) ? 12 : 10}
+                    rows={(showAiChat || showTextChat || showSuggestEdits) ? 12 : 10}
                     className="resize-y text-sm leading-relaxed font-sans"
                     disabled={generating}
                   />
