@@ -368,81 +368,83 @@ function VoiceCapture({
 
   return (
     <div className="space-y-3">
-      {/* IDLE / ERROR — action buttons with descriptions */}
+      {/* IDLE / ERROR — primary actions prominent, secondary actions smaller */}
       {(state === "idle" || state === "error") && (
-        <div className="grid grid-cols-2 gap-3">
-          {/* Record summary */}
-          <div className="flex flex-col gap-1.5">
-            <Button
-              type="button"
-              size="sm"
-              onClick={() => startRecording("replace")}
-              className="w-full gap-2 justify-center"
-            >
-              <Mic className="h-4 w-4" />
-              {hasExistingContent ? "Re-record" : "Record summary"}
-            </Button>
-            <p className="text-[11px] text-muted-foreground text-center leading-snug">
-              {hasExistingContent
-                ? "Replace the current note with a new recording."
-                : "Speak a recap and your note will be auto-generated."}
-            </p>
+        <div className="space-y-2">
+          {/* Primary row — Record summary + Talk to AI */}
+          <div className="grid grid-cols-2 gap-2">
+            {/* Record summary */}
+            <div className="relative group">
+              <Button
+                type="button"
+                onClick={() => startRecording("replace")}
+                className="w-full gap-2 justify-center h-10 text-sm"
+              >
+                <Mic className="h-4 w-4" />
+                {hasExistingContent ? "Re-record" : "Record summary"}
+              </Button>
+              <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-48 rounded-md bg-popover border shadow-md px-3 py-2 text-[11px] text-muted-foreground leading-snug text-center pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity duration-150 z-50">
+                {hasExistingContent
+                  ? "Replace the current note with a new recording."
+                  : "Speak a recap and your note will be auto-generated."}
+              </div>
+            </div>
+
+            {/* Talk to AI */}
+            {onTalkToAI && (
+              <div className="relative group">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={onTalkToAI}
+                  className="w-full gap-2 justify-center h-10 text-sm text-violet-600 border-violet-300 hover:bg-violet-50"
+                >
+                  <MessageSquare className="h-4 w-4" />
+                  Talk to AI
+                </Button>
+                <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-48 rounded-md bg-popover border shadow-md px-3 py-2 text-[11px] text-muted-foreground leading-snug text-center pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity duration-150 z-50">
+                  AI interviews you with guided questions to fill in your note.
+                </div>
+              </div>
+            )}
           </div>
 
-          {/* Talk to AI */}
-          {onTalkToAI && (
-            <div className="flex flex-col gap-1.5">
+          {/* Secondary row — Add information + Regenerate with AI */}
+          <div className="grid grid-cols-2 gap-2">
+            <div className="relative group">
               <Button
                 type="button"
                 size="sm"
-                variant="outline"
-                onClick={onTalkToAI}
-                className="w-full gap-2 justify-center text-violet-600 border-violet-300 hover:bg-violet-50"
+                variant="ghost"
+                onClick={() => startRecording("append")}
+                className="w-full gap-1.5 justify-center text-xs text-muted-foreground hover:text-foreground"
               >
-                <MessageSquare className="h-3.5 w-3.5" />
-                Talk to AI
+                <PlusCircle className="h-3.5 w-3.5" />
+                Add information
               </Button>
-              <p className="text-[11px] text-muted-foreground text-center leading-snug">
-                AI interviews you with guided questions to fill in your note.
-              </p>
+              <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-48 rounded-md bg-popover border shadow-md px-3 py-2 text-[11px] text-muted-foreground leading-snug text-center pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity duration-150 z-50">
+                Record additional context to expand the existing note.
+              </div>
             </div>
-          )}
 
-          {/* Add Information */}
-          <div className="flex flex-col gap-1.5">
-            <Button
-              type="button"
-              size="sm"
-              variant="outline"
-              onClick={() => startRecording("append")}
-              className="w-full gap-2 justify-center"
-            >
-              <PlusCircle className="h-3.5 w-3.5" />
-              Add information
-            </Button>
-            <p className="text-[11px] text-muted-foreground text-center leading-snug">
-              Record additional context to expand the existing note.
-            </p>
+            {onRegenerate && (
+              <div className="relative group">
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="ghost"
+                  onClick={onRegenerate}
+                  className="w-full gap-1.5 justify-center text-xs text-violet-500 hover:text-violet-700 hover:bg-violet-50"
+                >
+                  <RefreshCw className="h-3.5 w-3.5" />
+                  Regenerate with AI
+                </Button>
+                <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-48 rounded-md bg-popover border shadow-md px-3 py-2 text-[11px] text-muted-foreground leading-snug text-center pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity duration-150 z-50">
+                  Re-draft the note using your existing goal data.
+                </div>
+              </div>
+            )}
           </div>
-
-          {/* Regenerate with AI */}
-          {onRegenerate && (
-            <div className="flex flex-col gap-1.5">
-              <Button
-                type="button"
-                size="sm"
-                variant="outline"
-                onClick={onRegenerate}
-                className="w-full gap-2 justify-center text-violet-600 border-violet-300 hover:bg-violet-50"
-              >
-                <RefreshCw className="h-3.5 w-3.5" />
-                Regenerate with AI
-              </Button>
-              <p className="text-[11px] text-muted-foreground text-center leading-snug">
-                Re-draft the note using your existing goal data.
-              </p>
-            </div>
-          )}
         </div>
       )}
 
