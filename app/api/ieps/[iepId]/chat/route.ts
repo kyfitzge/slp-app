@@ -151,10 +151,14 @@ STEP 3 — HIGHEST-VALUE QUESTION: Identify the single most clinically valuable 
    → Baseline: probe accuracy (8/10, /r/, minimal verbal cues)
    → Functional Impact: reduced intelligibility affecting classroom participation
    Do NOT follow up on either — you already have them. Ask about the next gap instead.
-5. When you have sufficient information for one or more fields, output on a new line starting with EXACTLY:
-   IEP_UPDATE:
-   followed by a valid JSON object. Use only these keys: strengths, areasOfNeed, functionalImpact, baselinePerformance, communicationProfile, parentConcerns.
-   Include ONLY fields you have sufficient information for. Do not output IEP_UPDATE if nothing substantive was learned.
+5. When you have sufficient information for one or more fields, output IEP_UPDATE on its own line:
+   IEP_UPDATE: {"key": "value", ...}
+   Use only these keys: strengths, areasOfNeed, functionalImpact, baselinePerformance, communicationProfile, parentConcerns.
+   Include ONLY fields you have sufficient information for.
+   CRITICAL: You MUST always write either the next question OR a closing statement as plain text BEFORE the IEP_UPDATE line.
+   Never output IEP_UPDATE as the only content — there must always be a sentence before it.
+   ✓ Correct: "What specific phoneme errors does ${studentName} produce?\nIEP_UPDATE: {...}"
+   ✗ Wrong: "IEP_UPDATE: {...}" with nothing before it.
 6. Write all field content in professional school-based SLP documentation language:
    — Third person: "Student demonstrates…" "Student presents with…"
    — Include measurable specifics: "72% accuracy in connected speech," "age-equivalent score of 5;6," "with minimal verbal cues"
@@ -164,13 +168,17 @@ STEP 3 — HIGHEST-VALUE QUESTION: Identify the single most clinically valuable 
    — Attribute secondhand information: "per teacher report," "per parent report," "per clinician probe"
 7. When the answer is vague or indirect, use conservative language rather than inventing specifics.
    Example: "Student's parent reports difficulty being understood by peers" — not a fabricated clinical observation.
-8. When all relevant empty and partial sections have been adequately addressed:
-   — Briefly confirm what was captured in one sentence
-   — Output a final IEP_UPDATE containing all newly populated fields
-   — Ask if anything needs to be adjusted or clarified
-9. Tone: direct, collegial, efficient. No preambles. No apologies. No over-explaining.
-   ✓ Good: "What articulation errors does ${studentName} produce in connected speech?"
-   ✗ Bad: "Great! Now, could you tell me a bit more about how ${studentName} communicates in general?"`;
+8. When the user indicates they are done, finished, want to stop, or says "no" to continuing:
+   — Write one brief closing sentence (e.g. "Got it — applying what we've captured.")
+   — Output a final IEP_UPDATE with all information gathered so far in this conversation
+   — Do NOT ask any further questions after this
+9. When all empty/partial sections have been filled through the conversation:
+   — Write one brief confirmation sentence
+   — Output a final IEP_UPDATE with all populated fields
+   — Ask only if anything needs to be adjusted — do not loop back to asking new questions
+10. Tone: direct, collegial, efficient. No preambles. No apologies. No over-explaining.
+    ✓ Good: "What articulation errors does ${studentName} produce in connected speech?"
+    ✗ Bad: "Great! Now, could you tell me a bit more about how ${studentName} communicates in general?"`;
 }
 
 export async function POST(
@@ -230,7 +238,7 @@ export async function POST(
       const jsonStr = fullText.slice(iepUpdateIdx + iepUpdateMarker.length).trim();
       reply = fullText.slice(0, iepUpdateIdx).trim();
       if (!reply) {
-        reply = "I've captured some information for the IEP. Would you like to continue?";
+        reply = "Got it — applying the captured information to your IEP.";
       }
       try {
         iepUpdate = JSON.parse(jsonStr);
