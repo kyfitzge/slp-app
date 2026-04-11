@@ -365,61 +365,56 @@ function VoiceCapture({
   const isRecordingAny = state === "recording" || state === "appending";
 
   return (
-    <div className="rounded-lg border bg-muted/30 p-3 space-y-2.5">
-      <div className="flex items-center justify-between">
-        <p className="text-xs font-medium text-muted-foreground">
-          Voice recording
-        </p>
-        {state === "done" && (
-          <span className="flex items-center gap-1 text-xs font-medium text-green-700 bg-green-50 border border-green-200 rounded-full px-2 py-0.5">
-            <Check className="h-3 w-3" /> Processed
-          </span>
-        )}
-      </div>
-
-      <div className="flex items-center gap-2 flex-wrap">
-        {/* IDLE / ERROR — show record button; if content already exists show both options */}
-        {(state === "idle" || state === "error") && (
-          <>
+    <div className="space-y-3">
+      {/* IDLE / ERROR — two clean action buttons with descriptions */}
+      {(state === "idle" || state === "error") && (
+        <div className="flex gap-3">
+          {/* Record summary */}
+          <div className="flex-1 flex flex-col gap-1.5">
             <Button
               type="button"
               size="sm"
-              variant={hasExistingContent ? "outline" : "default"}
               onClick={() => startRecording("replace")}
-              className="gap-2"
+              className="w-full gap-2 justify-center"
             >
               <Mic className="h-4 w-4" />
               {hasExistingContent ? "Re-record" : "Record summary"}
             </Button>
-            {hasExistingContent && (
-              <Button
-                type="button"
-                size="sm"
-                variant="outline"
-                onClick={() => startRecording("append")}
-                className="gap-2 text-primary border-primary/40 hover:bg-primary/5"
-              >
-                <PlusCircle className="h-3.5 w-3.5" />
-                Add more information
-              </Button>
-            )}
-            {onTalkToAI && (
+            <p className="text-[11px] text-muted-foreground text-center leading-snug">
+              {hasExistingContent
+                ? "Replace the current note with a new recording."
+                : "Speak a recap and your note will be auto-generated."}
+            </p>
+          </div>
+
+          {/* Talk to AI */}
+          {onTalkToAI && (
+            <div className="flex-1 flex flex-col gap-1.5">
               <Button
                 type="button"
                 size="sm"
                 variant="outline"
                 onClick={onTalkToAI}
-                className="gap-2 text-violet-600 border-violet-300 hover:bg-violet-50"
+                className="w-full gap-2 justify-center text-violet-600 border-violet-300 hover:bg-violet-50"
               >
                 <MessageSquare className="h-3.5 w-3.5" />
                 Talk to AI
               </Button>
-            )}
-          </>
-        )}
+              <p className="text-[11px] text-muted-foreground text-center leading-snug">
+                AI interviews you with guided questions to fill in your note.
+              </p>
+            </div>
+          )}
+        </div>
+      )}
 
-        {/* ACTIVE RECORDING — stop button */}
-        {isRecordingAny && (
+      {state === "error" && (
+        <p className="text-xs text-destructive">{errorMsg}</p>
+      )}
+
+      {/* ACTIVE RECORDING */}
+      {isRecordingAny && (
+        <div className="flex flex-col gap-1.5">
           <Button
             type="button"
             size="sm"
@@ -433,74 +428,65 @@ function VoiceCapture({
               {state === "appending" ? "Stop adding" : "Stop"} — {mm}:{ss}
             </span>
           </Button>
-        )}
+          <p className="text-xs text-muted-foreground">
+            {state === "appending"
+              ? "Recording additional context — it will be merged with your previous note."
+              : "Speak your session recap, accuracy data, and next-session plan…"}
+          </p>
+        </div>
+      )}
 
-        {/* PROCESSING */}
-        {state === "processing" && (
-          <Button type="button" size="sm" variant="outline" disabled className="gap-2">
-            <Loader2 className="h-4 w-4 animate-spin" />
-            Processing…
-          </Button>
-        )}
+      {/* PROCESSING */}
+      {state === "processing" && (
+        <div className="flex items-center gap-2 text-xs text-muted-foreground">
+          <Loader2 className="h-4 w-4 animate-spin text-primary" />
+          Transcribing and generating your note…
+        </div>
+      )}
 
-        {/* DONE — re-record + add more (always shown after a successful recording) */}
-        {state === "done" && (
-          <>
+      {/* DONE — compact secondary options */}
+      {state === "done" && (
+        <div className="flex flex-col gap-2">
+          <div className="flex items-center gap-1.5">
+            <Check className="h-3.5 w-3.5 text-green-600 shrink-0" />
+            <span className="text-xs text-green-700 font-medium">Note generated</span>
+          </div>
+          <div className="flex items-center gap-2 flex-wrap">
             <Button
               type="button"
               size="sm"
-              variant="outline"
+              variant="ghost"
               onClick={() => startRecording("replace")}
-              className="gap-2"
+              className="gap-1.5 h-7 text-xs text-muted-foreground hover:text-foreground"
             >
-              <RotateCcw className="h-3.5 w-3.5" />
+              <RotateCcw className="h-3 w-3" />
               Re-record
             </Button>
             <Button
               type="button"
               size="sm"
-              variant="outline"
+              variant="ghost"
               onClick={() => startRecording("append")}
-              className="gap-2 text-primary border-primary/40 hover:bg-primary/5"
+              className="gap-1.5 h-7 text-xs text-muted-foreground hover:text-foreground"
             >
-              <PlusCircle className="h-3.5 w-3.5" />
-              Add more information
+              <PlusCircle className="h-3 w-3" />
+              Add more
             </Button>
             {onTalkToAI && (
               <Button
                 type="button"
                 size="sm"
-                variant="outline"
+                variant="ghost"
                 onClick={onTalkToAI}
-                className="gap-2 text-violet-600 border-violet-300 hover:bg-violet-50"
+                className="gap-1.5 h-7 text-xs text-violet-600 hover:text-violet-700 hover:bg-violet-50"
               >
-                <MessageSquare className="h-3.5 w-3.5" />
+                <MessageSquare className="h-3 w-3" />
                 Talk to AI
               </Button>
             )}
-          </>
-        )}
-      </div>
-
-      {/* Context labels */}
-      <p className="text-xs text-muted-foreground">
-        {state === "idle" && !hasExistingContent &&
-          "Record a spoken recap — your note and plan will be generated automatically."}
-        {state === "idle" && hasExistingContent &&
-          "Re-record to replace the current note, or add more information to expand it."}
-        {state === "recording" &&
-          "Speak your session recap, accuracy data, and next-session plan…"}
-        {state === "appending" &&
-          "Recording additional context — it will be merged with your previous recording."}
-        {state === "processing" && "Transcribing and generating your note…"}
-        {state === "done" && hasExistingContent &&
-          "Note generated. Re-record to start over, or add more detail."}
-        {state === "done" && !hasExistingContent &&
-          "Note generated from your recording."}
-        {state === "error" && (
-          <span className="text-destructive">{errorMsg}</span>
-        )}
-      </p>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -1618,28 +1604,6 @@ export function SessionNotePage({
                     toast.success("Note updated from AI conversation");
                   }}
                 />
-              )}
-
-              {/* Regenerate button — only shown once there is something to work with */}
-              {(summaryContext.trim() || noteDraft.trim()) && (
-                <div className="flex items-center gap-2 flex-wrap">
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    disabled={generating}
-                    onClick={() => generateNote()}
-                    className="gap-2"
-                  >
-                    {generating ? (
-                      <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Generating…</>
-                    ) : (
-                      <><RefreshCw className="h-3.5 w-3.5" /> Regenerate</>
-                    )}
-                  </Button>
-                  <span className="text-xs text-muted-foreground">
-                    Regenerate note from your recording
-                  </span>
-                </div>
               )}
 
               {/* Note textarea */}
