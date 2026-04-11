@@ -134,7 +134,10 @@ function extractFromText(text: string): ExtractedData {
   if (!text.trim()) return {};
   const result: ExtractedData = {};
 
-  const trialMatch = text.match(/(\d+)\s*(?:\/|out\s+of)\s*(\d+)/i);
+  // Handle "18/27", "18 out of 27", "18 correct responses out of 27", etc.
+  const trialMatch =
+    text.match(/\b(\d+)\b(?:\s+\w+){0,4}\s+out\s+of\s+(\d+)/i) ||
+    text.match(/(\d+)\s*\/\s*(\d+)/);
   if (trialMatch) {
     result.trialsCorrect = parseInt(trialMatch[1]);
     result.trialsTotal = parseInt(trialMatch[2]);
@@ -187,9 +190,19 @@ function extractDataForGoal(transcript: string, goal: Goal): ExtractedData {
   const keywords = [...name.split(/\s+/).filter((w) => w.length > 2), domain];
   // Split on sentence boundaries
   const sentences = transcript.split(/(?<=[.!?])\s+/);
-  const relevant = sentences.filter((s) =>
-    keywords.some((kw) => s.toLowerCase().includes(kw))
-  );
+
+  // Find indices of keyword-matching sentences, then include the next 2 sentences
+  // as context — clinical notes often state the goal first, then performance data.
+  const matchedIndices = new Set<number>();
+  sentences.forEach((s, i) => {
+    if (keywords.some((kw) => s.toLowerCase().includes(kw))) {
+      matchedIndices.add(i);
+      if (i + 1 < sentences.length) matchedIndices.add(i + 1);
+      if (i + 2 < sentences.length) matchedIndices.add(i + 2);
+    }
+  });
+
+  const relevant = sentences.filter((_, i) => matchedIndices.has(i));
   return relevant.length > 0 ? extractFromText(relevant.join(" ")) : {};
 }
 
@@ -1303,10 +1316,16 @@ export function SessionNotePage({
     }
   }, [sessionId, allGoals]);
 
-  // Re-run extraction when the page loads with a saved summary context
+  // On load: run AI extraction against the voice transcript and/or saved note draft
   useEffect(() => {
-    if (initialSummaryContext.trim()) {
-      extractStructuredData(initialSummaryContext);
+    const transcript = initialSummaryContext.trim();
+    const note = initialNote.trim();
+    if (transcript || note) {
+      // Send both if available so the extractor can pick the richest source
+      extractStructuredData(transcript && note ? `${transcript}\n\n${note}` : transcript || note);
+    }
+    if (note) {
+      setNoteExtractionContext(note);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
