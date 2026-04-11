@@ -967,9 +967,9 @@ function AiChatPanel({
   }[voiceState];
 
   return (
-    <div className="rounded-lg border border-violet-200 bg-violet-50/40 overflow-hidden">
+    <div className="rounded-lg border border-violet-200 bg-violet-50/40 overflow-hidden flex flex-col">
       {/* Header */}
-      <div className="flex items-center justify-between px-3.5 py-2.5 bg-violet-100/60 border-b border-violet-200">
+      <div className="flex items-center justify-between px-3.5 py-2.5 bg-violet-100/60 border-b border-violet-200 shrink-0">
         <div className="flex items-center gap-2">
           <div className="flex items-center justify-center h-5 w-5 rounded bg-violet-600/10">
             <Bot className="h-3.5 w-3.5 text-violet-600" />
@@ -995,7 +995,7 @@ function AiChatPanel({
       </div>
 
       {/* Conversation */}
-      <div className="max-h-52 overflow-y-auto px-3.5 py-3 space-y-2.5">
+      <div className="flex-1 overflow-y-auto min-h-[160px] max-h-[340px] px-3.5 py-3 space-y-2.5">
         {messages.length === 0 && voiceState === "ai_thinking" && (
           <div className="flex items-center gap-2 text-xs text-muted-foreground">
             <Loader2 className="h-3.5 w-3.5 animate-spin text-violet-500" />
@@ -1043,7 +1043,7 @@ function AiChatPanel({
 
       {/* Note update card */}
       {pendingNoteUpdate && (
-        <div className="mx-3.5 mb-3 rounded-lg border border-violet-200 bg-white p-3 space-y-2">
+        <div className="mx-3.5 mb-3 rounded-lg border border-violet-200 bg-white p-3 space-y-2 shrink-0">
           <div className="flex items-center gap-1.5 text-xs font-semibold text-violet-700">
             <Sparkles className="h-3.5 w-3.5" />
             Suggested note update
@@ -1061,7 +1061,7 @@ function AiChatPanel({
       )}
 
       {/* Voice control */}
-      <div className="border-t border-violet-200 bg-white px-3.5 py-4 flex flex-col items-center gap-3">
+      <div className="border-t border-violet-200 bg-white px-3.5 py-4 flex flex-col items-center gap-3 shrink-0">
         {statusMsg && <p className="text-xs text-destructive text-center">{statusMsg}</p>}
 
         {/* Central mic / state button */}
@@ -1232,9 +1232,9 @@ function TextChatPanel({
   }
 
   return (
-    <div className="rounded-lg border border-violet-200 bg-violet-50/40 overflow-hidden">
+    <div className="rounded-lg border border-violet-200 bg-violet-50/40 overflow-hidden flex flex-col">
       {/* Header */}
-      <div className="flex items-center justify-between px-3.5 py-2.5 bg-violet-100/60 border-b border-violet-200">
+      <div className="flex items-center justify-between px-3.5 py-2.5 bg-violet-100/60 border-b border-violet-200 shrink-0">
         <div className="flex items-center gap-2">
           <div className="flex items-center justify-center h-5 w-5 rounded bg-violet-600/10">
             <Bot className="h-3.5 w-3.5 text-violet-600" />
@@ -1252,7 +1252,7 @@ function TextChatPanel({
       </div>
 
       {/* Conversation */}
-      <div className="max-h-52 overflow-y-auto px-3.5 py-3 space-y-2.5">
+      <div className="flex-1 overflow-y-auto min-h-[160px] max-h-[340px] px-3.5 py-3 space-y-2.5">
         {messages.length === 0 && isThinking && (
           <div className="flex items-center gap-2 text-xs text-muted-foreground">
             <Loader2 className="h-3.5 w-3.5 animate-spin text-violet-500" />
@@ -1300,7 +1300,7 @@ function TextChatPanel({
 
       {/* Note update card */}
       {pendingNoteUpdate && (
-        <div className="mx-3.5 mb-3 rounded-lg border border-violet-200 bg-white p-3 space-y-2">
+        <div className="mx-3.5 mb-3 rounded-lg border border-violet-200 bg-white p-3 space-y-2 shrink-0">
           <div className="flex items-center gap-1.5 text-xs font-semibold text-violet-700">
             <Sparkles className="h-3.5 w-3.5" />
             Suggested note update
@@ -1318,7 +1318,7 @@ function TextChatPanel({
       )}
 
       {/* Text input */}
-      <div className="border-t border-violet-200 bg-white px-3.5 py-3">
+      <div className="border-t border-violet-200 bg-white px-3.5 py-3 shrink-0">
         <div className="flex gap-2 items-end">
           <textarea
             ref={textInputRef}
@@ -1912,148 +1912,153 @@ export function SessionNotePage({
         {/* ── LEFT COLUMN ────────────────────────────────── */}
         <div className="space-y-4">
 
-          {/* ─ CARD 1: Session Note Draft ──────────────────── */}
-          <div className="rounded-xl border bg-card overflow-hidden">
-            {/* AI header banner */}
-            <div className="flex items-center gap-2.5 px-5 py-3.5 bg-primary/5 border-b border-primary/10">
-              <div className="flex items-center justify-center h-7 w-7 rounded-lg bg-primary/10 shrink-0">
-                <Bot className="h-4 w-4 text-primary" />
+          {/* Split layout: chat panel slides in to the left of the note card */}
+          <div className={cn(
+            "grid gap-4 items-start transition-[grid-template-columns] duration-300",
+            (showAiChat || showTextChat) ? "grid-cols-1 md:grid-cols-2" : "grid-cols-1"
+          )}>
+
+            {/* ── AI / Text Chat Panel (left slot) ───────────── */}
+            {(showAiChat || showTextChat) && (
+              <div className="animate-in slide-in-from-left-4 duration-300">
+                {showAiChat ? (
+                  <AiChatPanel
+                    sessionId={sessionId}
+                    context={{
+                      sessionDate: format(new Date(sessionDate), "MMM d, yyyy"),
+                      sessionType: SESSION_TYPE_LABELS[sessionType] ?? sessionType,
+                      durationMins: effectiveDuration,
+                      students: students.map((s) => `${s.firstName} ${s.lastName}`),
+                      goals: matchedGoals.map((mg) => {
+                        const aiExt  = aiExtractions[mg.goal.id];
+                        const ovride = goalOverrides[mg.goal.id];
+                        return {
+                          id: mg.goal.id,
+                          name: mg.goal.shortName ?? mg.goal.goalText.slice(0, 50),
+                          accuracy: goalEffectiveAccuracy(mg, aiExt, ovride),
+                          trials: goalEffectiveTrials(mg, aiExt, ovride),
+                          cueing: goalEffectiveCueing(mg, aiExt, ovride),
+                        };
+                      }),
+                      missingLabels,
+                      currentNote: noteDraft,
+                      transcript: summaryContext || undefined,
+                    }}
+                    onClose={() => setShowAiChat(false)}
+                    onApplyNote={(summary) => generateNote(summary)}
+                  />
+                ) : (
+                  <TextChatPanel
+                    sessionId={sessionId}
+                    context={{
+                      sessionDate: format(new Date(sessionDate), "MMM d, yyyy"),
+                      sessionType: SESSION_TYPE_LABELS[sessionType] ?? sessionType,
+                      durationMins: effectiveDuration,
+                      students: students.map((s) => `${s.firstName} ${s.lastName}`),
+                      goals: matchedGoals.map((mg) => {
+                        const aiExt  = aiExtractions[mg.goal.id];
+                        const ovride = goalOverrides[mg.goal.id];
+                        return {
+                          id: mg.goal.id,
+                          name: mg.goal.shortName ?? mg.goal.goalText.slice(0, 50),
+                          accuracy: goalEffectiveAccuracy(mg, aiExt, ovride),
+                          trials: goalEffectiveTrials(mg, aiExt, ovride),
+                          cueing: goalEffectiveCueing(mg, aiExt, ovride),
+                        };
+                      }),
+                      missingLabels,
+                      currentNote: noteDraft,
+                      transcript: summaryContext || undefined,
+                    }}
+                    onClose={() => setShowTextChat(false)}
+                    onApplyNote={(summary) => augmentNote(summary)}
+                  />
+                )}
               </div>
-              <div className="flex-1 min-w-0">
-                <p className="text-sm font-semibold">Session Note Draft</p>
-                <p className="text-xs text-muted-foreground">
-                  Record your session summary or click Generate to draft from goal data
-                </p>
-              </div>
-              {generatedAt && (
-                <span className="text-xs text-muted-foreground shrink-0">
-                  {format(generatedAt, "h:mm a")}
-                </span>
-              )}
-            </div>
+            )}
 
-            <div className="p-5 space-y-4">
-              {/* Voice recorder */}
-              <VoiceCapture
-                sessionId={sessionId}
-                hasExistingContent={!!noteDraft.trim()}
-                onTranscript={handleVoiceTranscript}
-                onTalkToAI={() => { setShowTextChat(false); setShowAiChat(true); }}
-                onTextChat={() => { setShowAiChat(false); setShowTextChat(true); }}
-                onRegenerate={() => generateNote()}
-                onClearNote={() => {
-                  setNoteDraft("");
-                  setSummaryContext("");
-                  setHasUnsavedChanges(false);
-                }}
-              />
-
-              {/* Text Chat Panel */}
-              {showTextChat && (
-                <TextChatPanel
-                  sessionId={sessionId}
-                  context={{
-                    sessionDate: format(new Date(sessionDate), "MMM d, yyyy"),
-                    sessionType: SESSION_TYPE_LABELS[sessionType] ?? sessionType,
-                    durationMins: effectiveDuration,
-                    students: students.map((s) => `${s.firstName} ${s.lastName}`),
-                    goals: matchedGoals.map((mg) => {
-                      const aiExt  = aiExtractions[mg.goal.id];
-                      const ovride = goalOverrides[mg.goal.id];
-                      return {
-                        id: mg.goal.id,
-                        name: mg.goal.shortName ?? mg.goal.goalText.slice(0, 50),
-                        accuracy: goalEffectiveAccuracy(mg, aiExt, ovride),
-                        trials: goalEffectiveTrials(mg, aiExt, ovride),
-                        cueing: goalEffectiveCueing(mg, aiExt, ovride),
-                      };
-                    }),
-                    missingLabels,
-                    currentNote: noteDraft,
-                    transcript: summaryContext || undefined,
-                  }}
-                  onClose={() => setShowTextChat(false)}
-                  onApplyNote={(summary) => {
-                    augmentNote(summary);
-                  }}
-                />
-              )}
-
-              {/* AI Chat Panel */}
-              {showAiChat && (
-                <AiChatPanel
-                  sessionId={sessionId}
-                  context={{
-                    sessionDate: format(new Date(sessionDate), "MMM d, yyyy"),
-                    sessionType: SESSION_TYPE_LABELS[sessionType] ?? sessionType,
-                    durationMins: effectiveDuration,
-                    students: students.map((s) => `${s.firstName} ${s.lastName}`),
-                    goals: matchedGoals.map((mg) => {
-                      const aiExt  = aiExtractions[mg.goal.id];
-                      const ovride = goalOverrides[mg.goal.id];
-                      return {
-                        id: mg.goal.id,
-                        name: mg.goal.shortName ?? mg.goal.goalText.slice(0, 50),
-                        accuracy: goalEffectiveAccuracy(mg, aiExt, ovride),
-                        trials: goalEffectiveTrials(mg, aiExt, ovride),
-                        cueing: goalEffectiveCueing(mg, aiExt, ovride),
-                      };
-                    }),
-                    missingLabels,
-                    currentNote: noteDraft,
-                    transcript: summaryContext || undefined,
-                  }}
-                  onClose={() => setShowAiChat(false)}
-                  onApplyNote={(summary) => {
-                    // Route through the same generate-note pipeline as Record Summary
-                    // so the clinical note quality is consistent
-                    generateNote(summary);
-                  }}
-                />
-              )}
-
-              {/* Note textarea */}
-              <div className="space-y-1.5">
-                <Textarea
-                  value={noteDraft}
-                  onChange={(e) => handleNoteChange(e.target.value)}
-                  placeholder={
-                    generating
-                      ? "Generating note draft…"
-                      : "Record your session above, or click Generate to draft from goal data."
-                  }
-                  rows={10}
-                  className="resize-y text-sm leading-relaxed font-sans"
-                  disabled={generating}
-                />
-                <div className="flex items-center justify-between">
-                  {noteDraft && (
-                    <span className="text-xs text-muted-foreground/70 italic flex items-center gap-1">
-                      <Bot className="h-3 w-3" />
-                      AI-generated — review and edit before saving
-                    </span>
-                  )}
-                  <span
-                    className={cn(
-                      "text-xs ml-auto transition-colors",
-                      noteStatus === "saved" ? "text-green-600" : "text-muted-foreground"
-                    )}
-                  >
-                    {noteStatus === "saving" && "Saving…"}
-                    {noteStatus === "saved" && "Draft saved ✓"}
+            {/* ─ CARD 1: Session Note Draft ──────────────────── */}
+            <div className="rounded-xl border bg-card overflow-hidden">
+              {/* AI header banner */}
+              <div className="flex items-center gap-2.5 px-5 py-3.5 bg-primary/5 border-b border-primary/10">
+                <div className="flex items-center justify-center h-7 w-7 rounded-lg bg-primary/10 shrink-0">
+                  <Bot className="h-4 w-4 text-primary" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-semibold">Session Note Draft</p>
+                  <p className="text-xs text-muted-foreground">
+                    {(showAiChat || showTextChat)
+                      ? "Edit directly or apply suggestions from the AI panel"
+                      : "Record your session summary or click Generate to draft from goal data"}
+                  </p>
+                </div>
+                {generatedAt && (
+                  <span className="text-xs text-muted-foreground shrink-0">
+                    {format(generatedAt, "h:mm a")}
                   </span>
-                </div>
+                )}
               </div>
 
-              {noteDraft && (
-                <div className="flex items-center gap-3 text-xs text-muted-foreground/70 border-t pt-3">
-                  <span>{noteDraft.trim().split(/\s+/).filter(Boolean).length} words</span>
-                  {noteDraft.trim().length < 30 && (
-                    <span className="text-amber-600">Note is very short</span>
-                  )}
+              <div className="p-5 space-y-4">
+                {/* Voice recorder + AI buttons */}
+                <VoiceCapture
+                  sessionId={sessionId}
+                  hasExistingContent={!!noteDraft.trim()}
+                  onTranscript={handleVoiceTranscript}
+                  onTalkToAI={() => { setShowTextChat(false); setShowAiChat((v) => !v); }}
+                  onTextChat={() => { setShowAiChat(false); setShowTextChat((v) => !v); }}
+                  onRegenerate={() => generateNote()}
+                  onClearNote={() => {
+                    setNoteDraft("");
+                    setSummaryContext("");
+                    setHasUnsavedChanges(false);
+                  }}
+                />
+
+                {/* Note textarea */}
+                <div className="space-y-1.5">
+                  <Textarea
+                    value={noteDraft}
+                    onChange={(e) => handleNoteChange(e.target.value)}
+                    placeholder={
+                      generating
+                        ? "Generating note draft…"
+                        : "Record your session above, or click Generate to draft from goal data."
+                    }
+                    rows={(showAiChat || showTextChat) ? 12 : 10}
+                    className="resize-y text-sm leading-relaxed font-sans"
+                    disabled={generating}
+                  />
+                  <div className="flex items-center justify-between">
+                    {noteDraft && (
+                      <span className="text-xs text-muted-foreground/70 italic flex items-center gap-1">
+                        <Bot className="h-3 w-3" />
+                        AI-generated — review and edit before saving
+                      </span>
+                    )}
+                    <span
+                      className={cn(
+                        "text-xs ml-auto transition-colors",
+                        noteStatus === "saved" ? "text-green-600" : "text-muted-foreground"
+                      )}
+                    >
+                      {noteStatus === "saving" && "Saving…"}
+                      {noteStatus === "saved" && "Draft saved ✓"}
+                    </span>
+                  </div>
                 </div>
-              )}
+
+                {noteDraft && (
+                  <div className="flex items-center gap-3 text-xs text-muted-foreground/70 border-t pt-3">
+                    <span>{noteDraft.trim().split(/\s+/).filter(Boolean).length} words</span>
+                    {noteDraft.trim().length < 30 && (
+                      <span className="text-amber-600">Note is very short</span>
+                    )}
+                  </div>
+                )}
+              </div>
             </div>
+
           </div>
 
         </div>
