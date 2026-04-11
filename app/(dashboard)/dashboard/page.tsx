@@ -50,16 +50,13 @@ export default async function DashboardPage() {
 
         <div className="flex items-center gap-2">
           {urgentIEPs.length > 0 && (
-            <Link
-              href="/students"
-              className={cn(
-                "flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-medium",
-                "bg-amber-50 text-amber-700 border border-amber-200 hover:bg-amber-100 transition-colors"
-              )}
-            >
+            <span className={cn(
+              "flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-medium",
+              "bg-amber-50 text-amber-700 border border-amber-200"
+            )}>
               <AlertTriangle className="h-3.5 w-3.5" />
               {urgentIEPs.length} IEP{urgentIEPs.length !== 1 ? "s" : ""} need attention
-            </Link>
+            </span>
           )}
           <Button asChild size="sm" variant="outline">
             <Link href="/sessions/new">
