@@ -1,11 +1,12 @@
 /**
  * POST /api/sessions/[sessionId]/chat
  *
- * Conversational AI documentation assistant for the session note workflow.
- * Receives the existing session context + chat history from the client
- * and returns a focused follow-up question or note suggestion.
+ * Intelligent SLP session-note interviewer.
+ * Receives full session context + conversation history from the client,
+ * returns the single highest-value missing question (or a completion
+ * summary when all required fields are captured).
  *
- * All session context is provided by the client (no DB reads needed here).
+ * Context is provided entirely by the client — no DB reads needed.
  */
 
 import { NextRequest, NextResponse } from "next/server";
@@ -28,6 +29,8 @@ interface ChatContext {
   goals: ChatGoal[];
   missingLabels: string[];
   currentNote: string;
+  /** Raw voice transcript if the SLP already recorded a summary. */
+  transcript?: string;
 }
 
 interface ChatMessage {
@@ -41,53 +44,88 @@ interface ChatBody {
 }
 
 function buildSystemPrompt(ctx: ChatContext): string {
-  const goalLines =
-    ctx.goals.length > 0
-      ? ctx.goals
-          .map((g) => {
-            const parts = [`- ${g.name}`];
-            if (g.accuracy != null) parts.push(`${g.accuracy}% accuracy`);
-            if (g.trials) parts.push(`${g.trials} trials`);
-            if (g.cueing) parts.push(`${g.cueing.replace(/_/g, " ").toLowerCase()} support`);
-            if (g.accuracy == null && !g.trials) parts.push("(no data captured yet)");
-            return parts.join(", ");
-          })
-          .join("\n")
-      : "(none captured yet)";
+  // ── What is already known ──────────────────────────────────────────────────
+  const knownGoals = ctx.goals.filter(
+    (g) => g.accuracy != null || g.trials != null || g.cueing != null
+  );
+  const unknownGoals = ctx.goals.filter(
+    (g) => g.accuracy == null && g.trials == null && g.cueing == null
+  );
+
+  const goalLines = ctx.goals.length > 0
+    ? ctx.goals.map((g) => {
+        const parts: string[] = [`• ${g.name}`];
+        if (g.accuracy != null)  parts.push(`${g.accuracy}% accuracy`);
+        if (g.trials)            parts.push(`${g.trials} trials`);
+        if (g.cueing)            parts.push(g.cueing.replace(/_/g, " ").toLowerCase());
+        if (g.accuracy == null && !g.trials) parts.push("(no performance data yet)");
+        return parts.join(" — ");
+      }).join("\n")
+    : "None identified yet.";
+
+  const missingSection = ctx.missingLabels.length > 0
+    ? `STILL MISSING: ${ctx.missingLabels.join(", ")}`
+    : "All required structured fields have been captured.";
 
   const noteSection = ctx.currentNote.trim()
-    ? `CURRENT NOTE DRAFT:\n"${ctx.currentNote.trim()}"\n`
-    : "No note draft yet.\n";
+    ? `CURRENT NOTE DRAFT:\n"${ctx.currentNote.trim()}"`
+    : "No note draft yet.";
 
-  const missingSection =
-    ctx.missingLabels.length > 0
-      ? `FIELDS STILL MISSING: ${ctx.missingLabels.join(", ")}`
-      : "All required fields have been captured.";
+  const transcriptSection = ctx.transcript?.trim()
+    ? `VOICE TRANSCRIPT (what the SLP already said):\n"${ctx.transcript.trim()}"`
+    : "";
+
+  const goalsNeedingData = unknownGoals.length > 0
+    ? `Goals with no performance data yet: ${unknownGoals.map((g) => g.name).join(", ")}`
+    : knownGoals.length > 0
+    ? `Performance data captured for: ${knownGoals.map((g) => g.name).join(", ")}`
+    : "";
+
+  // ── Determine conversation phase ──────────────────────────────────────────
+  const allCaptured = ctx.missingLabels.length === 0 && ctx.goals.length > 0 && knownGoals.length === ctx.goals.length;
 
   return `You are a clinical documentation assistant for a school-based Speech-Language Pathologist (SLP).
-Your job is to help the SLP fill in missing session documentation through a brief, focused conversation.
+Your sole purpose is to fill gaps in session documentation through a short, focused interview.
+You are NOT a general assistant or therapist. You are a fast, precise documentation tool.
 
-SESSION CONTEXT (already known — do NOT ask about these):
-- Date: ${ctx.sessionDate}
-- Type: ${ctx.sessionType}
-- Duration: ${ctx.durationMins ? `${ctx.durationMins} min` : "not recorded"}
-- Students: ${ctx.students.join(", ")}
+═══ SESSION CONTEXT (do NOT ask about any of this) ═══
+Date: ${ctx.sessionDate}
+Type: ${ctx.sessionType}
+Duration: ${ctx.durationMins ? `${ctx.durationMins} min` : "not yet recorded"}
+Students: ${ctx.students.join(", ")}
 
-GOALS ADDRESSED:
+═══ GOALS & PERFORMANCE DATA ═══
 ${goalLines}
+${goalsNeedingData ? `\n${goalsNeedingData}` : ""}
 
+${transcriptSection ? `═══ PRIOR VOICE TRANSCRIPT ═══\n${transcriptSection}\n` : ""}
+═══ CURRENT NOTE DRAFT ═══
 ${noteSection}
+
+═══ DOCUMENTATION STATUS ═══
 ${missingSection}
 
-RULES:
-1. Ask ONLY ONE focused question per response — the most important missing piece
-2. Prioritize in this order: goals targeted → accuracy/trials → cueing level → engagement/participation → plan for next session
-3. Skip anything already captured above
-4. Be concise and clinical — you're talking to a busy SLP, not a patient
-5. Use plain prose, no markdown bullets or headers
-6. When the SLP gives you enough data to meaningfully improve the note draft, include a suggested update on a NEW LINE starting with exactly "NOTE_UPDATE:" followed immediately by the improved note text. Only do this when you have concrete new information to add.
-7. Do not fabricate or assume clinical data — only use what the SLP tells you
-8. If all fields are already captured, say so briefly and ask if there's anything else to add`;
+═══ YOUR RULES ═══
+1. NEVER ask about information already present in the transcript, note draft, or session context above.
+2. Ask EXACTLY ONE short, specific question per response. No lists of questions, no preambles.
+3. Use this priority order when choosing what to ask next:
+   — (1) Which goals/targets were addressed (if none captured yet)
+   — (2) Student performance: accuracy % or trial counts (e.g. "8 out of 10")
+   — (3) Cueing or support level used (independent, verbal cues, modeling, etc.)
+   — (4) Activity or task the goal was practiced through
+   — (5) Student participation, engagement, or response to prompts
+   — (6) Notable observations, behavioral notes, or plan for next session
+4. If an answer is rich, extract ALL fields you can from it — only follow up on things you genuinely cannot infer.
+5. When you have enough new information to meaningfully improve the note, output the improved version on a new line starting with EXACTLY:
+   NOTE_UPDATE:
+   (followed immediately by the full note text — no label, no markdown, no quotes)
+   Only do this when you have concrete new details to add. Do NOT output NOTE_UPDATE if nothing new was learned.
+6. ${allCaptured
+    ? "All required fields are captured. Confirm this briefly and ask if there is anything else the SLP wants to add or clarify. If they say no, close the conversation."
+    : "Keep asking until all required fields are captured, then confirm and close."}
+7. Tone: direct, clinical, collegial. One sentence per question. No small talk. No apologies. No over-explaining.
+8. Example of a good question: "What accuracy did you observe on the /r/ articulation goal?"
+   Example of a bad question: "That's great! Now, could you tell me a little bit about how the student performed today in terms of their accuracy on the goals?"`;
 }
 
 export async function POST(
@@ -96,7 +134,7 @@ export async function POST(
 ) {
   try {
     await requireUser();
-    await params; // validate route param exists
+    await params;
 
     const apiKey = process.env.ANTHROPIC_API_KEY;
     if (!apiKey) {
@@ -115,22 +153,20 @@ export async function POST(
 
     const client = new Anthropic({ apiKey });
 
-    // Convert to Anthropic message format
-    // If there are no messages yet, send an init prompt
     const anthropicMessages: Anthropic.MessageParam[] =
       messages.length === 0
         ? [
             {
               role: "user",
               content:
-                "Please start by asking me the most important question to help complete this session note.",
+                "Start the interview. Read the session context and ask the single most important question to fill a documentation gap. Be direct and brief.",
             },
           ]
         : messages.map((m) => ({ role: m.role, content: m.content }));
 
     const response = await client.messages.create({
       model: process.env.LLM_NOTE_MODEL ?? "claude-haiku-4-5",
-      max_tokens: 400,
+      max_tokens: 500,
       system: buildSystemPrompt(context),
       messages: anthropicMessages,
     });
@@ -138,7 +174,7 @@ export async function POST(
     const fullText =
       response.content[0]?.type === "text" ? response.content[0].text.trim() : "";
 
-    // Parse out optional NOTE_UPDATE suggestion
+    // Parse NOTE_UPDATE suggestion
     const noteUpdateMarker = "NOTE_UPDATE:";
     const noteUpdateIdx = fullText.indexOf(noteUpdateMarker);
 
@@ -148,9 +184,8 @@ export async function POST(
     if (noteUpdateIdx !== -1) {
       noteUpdate = fullText.slice(noteUpdateIdx + noteUpdateMarker.length).trim();
       reply = fullText.slice(0, noteUpdateIdx).trim();
-      // If reply is empty after stripping the note update, provide a brief intro
       if (!reply) {
-        reply = "Here's a suggested update to your note draft:";
+        reply = "Here's an updated note draft based on what you've shared:";
       }
     }
 

@@ -687,6 +687,7 @@ interface AiChatContext {
   goals: AiChatGoal[];
   missingLabels: string[];
   currentNote: string;
+  transcript?: string;
 }
 
 type AiVoiceState =
@@ -1676,6 +1677,7 @@ export function SessionNotePage({
                     }),
                     missingLabels,
                     currentNote: noteDraft,
+                    transcript: summaryContext || undefined,
                   }}
                   onClose={() => setShowAiChat(false)}
                   onApplyNote={(note) => {
