@@ -442,6 +442,21 @@ function VoiceCapture({
             </Button>
           </Tip>
 
+          {onTalkToAI && (
+            <Tip tip="AI interviews you with guided questions to fill in your note.">
+              <Button
+                type="button"
+                size="sm"
+                variant="ghost"
+                onClick={onTalkToAI}
+                className="gap-1.5 h-8 text-xs text-violet-500 hover:text-violet-700 hover:bg-violet-50"
+              >
+                <MessageSquare className="h-3.5 w-3.5" />
+                Talk to AI
+              </Button>
+            </Tip>
+          )}
+
           {onRegenerate && (
             <Tip tip="Re-draft the note using your existing goal data.">
               <Button
