@@ -290,12 +290,14 @@ function VoiceCapture({
   onTranscript,
   onTalkToAI,
   onRegenerate,
+  onClearNote,
 }: {
   sessionId: string;
   hasExistingContent: boolean;
   onTranscript: (text: string, mode: TranscriptMode) => void;
   onTalkToAI?: () => void;
   onRegenerate?: () => void;
+  onClearNote?: () => void;
 }) {
   const [state, setState] = useState<VoiceState>("idle");
   const [elapsed, setElapsed] = useState(0);
@@ -419,7 +421,7 @@ function VoiceCapture({
               type="button"
               size="sm"
               variant="ghost"
-              onClick={() => startRecording("replace")}
+              onClick={() => { onClearNote?.(); startRecording("replace"); }}
               className="gap-1.5 h-8 text-xs text-muted-foreground hover:text-foreground"
             >
               <RotateCcw className="h-3.5 w-3.5" />
@@ -1618,6 +1620,11 @@ export function SessionNotePage({
                 onTranscript={handleVoiceTranscript}
                 onTalkToAI={() => setShowAiChat(true)}
                 onRegenerate={() => generateNote()}
+                onClearNote={() => {
+                  setNoteDraft("");
+                  setSummaryContext("");
+                  setHasUnsavedChanges(false);
+                }}
               />
 
               {/* AI Chat Panel */}
