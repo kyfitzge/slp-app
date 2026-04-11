@@ -160,28 +160,37 @@ export function IEPForm({ studentId, iepId, defaultValues, plaafp: plaafpProp, o
   const today = format(new Date(), "yyyy-MM-dd");
   const oneYearFromNow = format(addYears(new Date(), 1), "yyyy-MM-dd");
 
-  // Internal state — used when parent doesn't lift state (e.g. "new IEP" page)
-  const [internalPlaafp, setInternalPlaafp] = useState<PLAAFPState>(() =>
-    parsePLAAFPForForm(defaultValues?.presentLevels)
+  // IEPForm is always internally-state-driven so textareas reliably reflect
+  // both user edits AND programmatic updates from the AI assistant.
+  // When a parent provides plaafpProp (edit page), we initialise from it and
+  // keep in sync via useEffect.  When there is no prop (new IEP page) we fall
+  // back to parsing defaultValues.
+  const [plaafp, setPlaafpState] = useState<PLAAFPState>(
+    () => plaafpProp ?? parsePLAAFPForForm(defaultValues?.presentLevels)
   );
-  const [internalParentConcerns, setInternalParentConcerns] = useState(
-    defaultValues?.parentConcerns ?? ""
+  const [parentConcerns, setParentConcernsState] = useState<string>(
+    parentConcernsProp ?? defaultValues?.parentConcerns ?? ""
   );
 
-  // When the parent pushes a new plaafp (e.g. from AI assistant), sync internal
-  // state so textareas always display the latest value.
+  // Sync whenever the parent (AI assistant) pushes updated values in.
   useEffect(() => {
-    if (plaafpProp !== undefined) setInternalPlaafp(plaafpProp);
+    if (plaafpProp !== undefined) setPlaafpState(plaafpProp);
   }, [plaafpProp]);
 
   useEffect(() => {
-    if (parentConcernsProp !== undefined) setInternalParentConcerns(parentConcernsProp);
+    if (parentConcernsProp !== undefined) setParentConcernsState(parentConcernsProp);
   }, [parentConcernsProp]);
 
-  const plaafp = plaafpProp ?? internalPlaafp;
-  const parentConcerns = parentConcernsProp ?? internalParentConcerns;
-  const handlePlaafpChange = onPlaafpChange ?? setInternalPlaafp;
-  const handleParentConcernsChange = onParentConcernsChange ?? setInternalParentConcerns;
+  // When the user edits a field, update both local state AND notify the parent
+  // (so the AI context sees the latest values on the next turn).
+  function handlePlaafpChange(next: PLAAFPState) {
+    setPlaafpState(next);
+    onPlaafpChange?.(next);
+  }
+  function handleParentConcernsChange(next: string) {
+    setParentConcernsState(next);
+    onParentConcernsChange?.(next);
+  }
 
   const [showTransition, setShowTransition] = useState(!!defaultValues?.transitionNotes);
 
