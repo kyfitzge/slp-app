@@ -894,18 +894,20 @@ export function IEPPageClient({
           <Button
             onClick={() => setRightPanel("text-chat")}
             size="sm"
-            variant="outline"
-            className="text-violet-700 border-violet-300 hover:bg-violet-50 h-8 text-xs"
+            variant="ghost"
+            className="gap-1.5 h-8 text-xs text-violet-500 hover:text-violet-700 hover:bg-violet-50"
           >
-            <MessageSquare className="h-3.5 w-3.5 mr-1.5" />Chat with AI
+            <MessageSquare className="h-3.5 w-3.5" />
+            Chat with AI
           </Button>
           <Button
             onClick={() => setRightPanel("voice-chat")}
             size="sm"
-            variant="outline"
-            className="text-violet-700 border-violet-300 hover:bg-violet-50 h-8 text-xs"
+            variant="ghost"
+            className="gap-1.5 h-8 text-xs text-violet-500 hover:text-violet-700 hover:bg-violet-50"
           >
-            <Mic className="h-3.5 w-3.5 mr-1.5" />Talk to AI
+            <Mic className="h-3.5 w-3.5" />
+            Talk to AI
           </Button>
         </div>
       </div>
