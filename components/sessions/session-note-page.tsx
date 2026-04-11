@@ -302,6 +302,7 @@ function VoiceCapture({
   hasExistingContent,
   onTranscript,
   onTalkToAI,
+  onTextChat,
   onRegenerate,
   onClearNote,
 }: {
@@ -309,6 +310,7 @@ function VoiceCapture({
   hasExistingContent: boolean;
   onTranscript: (text: string, mode: TranscriptMode) => void;
   onTalkToAI?: () => void;
+  onTextChat?: () => void;
   onRegenerate?: () => void;
   onClearNote?: () => void;
 }) {
@@ -426,6 +428,21 @@ function VoiceCapture({
               </Button>
             </Tip>
           )}
+
+          {onTextChat && (
+            <Tip tip="Chat with AI by typing — ask questions or describe what happened.">
+              <Button
+                type="button"
+                size="sm"
+                variant="ghost"
+                onClick={onTextChat}
+                className="gap-1.5 h-8 text-xs text-violet-500 hover:text-violet-700 hover:bg-violet-50"
+              >
+                <MessageSquare className="h-3.5 w-3.5" />
+                Chat with AI
+              </Button>
+            </Tip>
+          )}
         </div>
       )}
 
@@ -469,6 +486,21 @@ function VoiceCapture({
               >
                 <MessageSquare className="h-3.5 w-3.5" />
                 Talk to AI
+              </Button>
+            </Tip>
+          )}
+
+          {onTextChat && (
+            <Tip tip="Chat with AI by typing — ask questions or describe what happened.">
+              <Button
+                type="button"
+                size="sm"
+                variant="ghost"
+                onClick={onTextChat}
+                className="gap-1.5 h-8 text-xs text-violet-500 hover:text-violet-700 hover:bg-violet-50"
+              >
+                <MessageSquare className="h-3.5 w-3.5" />
+                Chat with AI
               </Button>
             </Tip>
           )}
@@ -1117,6 +1149,207 @@ function AiChatPanel({
   );
 }
 
+// ─── TextChatPanel ────────────────────────────────────────────────────────────
+// Text-only version of AiChatPanel — same interview logic, no voice/TTS.
+
+function TextChatPanel({
+  sessionId,
+  context,
+  onClose,
+  onApplyNote,
+}: {
+  sessionId: string;
+  context: AiChatContext;
+  onClose: () => void;
+  onApplyNote: (note: string) => void;
+}) {
+  const [messages, setMessages] = useState<AiChatMessage[]>([]);
+  const [textInput, setTextInput] = useState("");
+  const [isThinking, setIsThinking] = useState(true);
+  const [pendingNoteUpdate, setPendingNoteUpdate] = useState<string | null>(null);
+
+  const initRef = useRef(false);
+  const bottomRef = useRef<HTMLDivElement>(null);
+  const textInputRef = useRef<HTMLTextAreaElement>(null);
+
+  useEffect(() => {
+    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages, isThinking]);
+
+  // Kick off the first AI question on mount
+  useEffect(() => {
+    if (!initRef.current) {
+      initRef.current = true;
+      sendToAI([]);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  async function sendToAI(history: AiChatMessage[]) {
+    setIsThinking(true);
+    try {
+      const res = await fetch(`/api/sessions/${sessionId}/chat`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ messages: history, context }),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error ?? "AI error");
+
+      const aiMsg: AiChatMessage = { role: "assistant", content: json.reply };
+      setMessages((prev) => [...prev, aiMsg]);
+      if (json.noteUpdate) setPendingNoteUpdate(json.noteUpdate);
+    } catch {
+      setMessages((prev) => [
+        ...prev,
+        { role: "assistant", content: "Sorry, I had trouble connecting. Please try again." },
+      ]);
+    } finally {
+      setIsThinking(false);
+      setTimeout(() => textInputRef.current?.focus(), 50);
+    }
+  }
+
+  function submitMessage(text: string) {
+    const trimmed = text.trim();
+    if (!trimmed) return;
+    const userMsg: AiChatMessage = { role: "user", content: trimmed };
+    const newHistory = [...messages, userMsg];
+    setMessages(newHistory);
+    setTextInput("");
+    setPendingNoteUpdate(null);
+    sendToAI(newHistory);
+  }
+
+  function applyNote() {
+    if (!pendingNoteUpdate) return;
+    onApplyNote(pendingNoteUpdate);
+    setPendingNoteUpdate(null);
+    setMessages((prev) => [
+      ...prev,
+      { role: "assistant", content: "Note updated. Is there anything else to add?" },
+    ]);
+  }
+
+  return (
+    <div className="rounded-lg border border-violet-200 bg-violet-50/40 overflow-hidden">
+      {/* Header */}
+      <div className="flex items-center justify-between px-3.5 py-2.5 bg-violet-100/60 border-b border-violet-200">
+        <div className="flex items-center gap-2">
+          <div className="flex items-center justify-center h-5 w-5 rounded bg-violet-600/10">
+            <Bot className="h-3.5 w-3.5 text-violet-600" />
+          </div>
+          <span className="text-xs font-semibold text-violet-800">AI Text Chat</span>
+        </div>
+        <button
+          type="button"
+          onClick={onClose}
+          className="text-violet-400 hover:text-violet-700 transition-colors"
+          aria-label="Close"
+        >
+          <X className="h-4 w-4" />
+        </button>
+      </div>
+
+      {/* Conversation */}
+      <div className="max-h-52 overflow-y-auto px-3.5 py-3 space-y-2.5">
+        {messages.length === 0 && isThinking && (
+          <div className="flex items-center gap-2 text-xs text-muted-foreground">
+            <Loader2 className="h-3.5 w-3.5 animate-spin text-violet-500" />
+            Starting your chat…
+          </div>
+        )}
+
+        {messages.map((msg, i) => (
+          <div key={i} className={cn("flex gap-2", msg.role === "user" ? "justify-end" : "justify-start")}>
+            {msg.role === "assistant" && (
+              <div className="shrink-0 h-5 w-5 rounded bg-violet-100 flex items-center justify-center mt-0.5">
+                <Bot className="h-3 w-3 text-violet-600" />
+              </div>
+            )}
+            <div
+              className={cn(
+                "max-w-[85%] rounded-xl px-3 py-2 text-xs leading-relaxed",
+                msg.role === "user"
+                  ? "bg-primary text-primary-foreground rounded-br-sm"
+                  : "bg-white border border-violet-100 text-foreground rounded-bl-sm shadow-sm"
+              )}
+            >
+              {msg.content}
+            </div>
+          </div>
+        ))}
+
+        {isThinking && messages.length > 0 && (
+          <div className="flex items-center gap-2">
+            <div className="h-5 w-5 rounded bg-violet-100 flex items-center justify-center">
+              <Bot className="h-3 w-3 text-violet-600" />
+            </div>
+            <div className="bg-white border border-violet-100 rounded-xl rounded-bl-sm px-3 py-2 shadow-sm">
+              <span className="flex gap-1">
+                <span className="h-1.5 w-1.5 rounded-full bg-violet-400 animate-bounce [animation-delay:-0.3s]" />
+                <span className="h-1.5 w-1.5 rounded-full bg-violet-400 animate-bounce [animation-delay:-0.15s]" />
+                <span className="h-1.5 w-1.5 rounded-full bg-violet-400 animate-bounce" />
+              </span>
+            </div>
+          </div>
+        )}
+
+        <div ref={bottomRef} />
+      </div>
+
+      {/* Note update card */}
+      {pendingNoteUpdate && (
+        <div className="mx-3.5 mb-3 rounded-lg border border-violet-200 bg-white p-3 space-y-2">
+          <div className="flex items-center gap-1.5 text-xs font-semibold text-violet-700">
+            <Sparkles className="h-3.5 w-3.5" />
+            Suggested note update
+          </div>
+          <p className="text-xs text-muted-foreground leading-relaxed line-clamp-3">{pendingNoteUpdate}</p>
+          <div className="flex gap-2">
+            <Button type="button" size="sm" className="h-7 text-xs gap-1.5 bg-violet-600 hover:bg-violet-700" onClick={applyNote}>
+              <Check className="h-3 w-3" /> Apply to note
+            </Button>
+            <Button type="button" size="sm" variant="ghost" className="h-7 text-xs text-muted-foreground" onClick={() => setPendingNoteUpdate(null)}>
+              Dismiss
+            </Button>
+          </div>
+        </div>
+      )}
+
+      {/* Text input */}
+      <div className="border-t border-violet-200 bg-white px-3.5 py-3">
+        <div className="flex gap-2 items-end">
+          <textarea
+            ref={textInputRef}
+            value={textInput}
+            onChange={(e) => setTextInput(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && !e.shiftKey) {
+                e.preventDefault();
+                submitMessage(textInput);
+              }
+            }}
+            placeholder="Type your answer… (Enter to send)"
+            rows={2}
+            disabled={isThinking}
+            className="flex-1 resize-none text-xs rounded-md border border-input bg-background px-2.5 py-2 focus:outline-none focus:ring-1 focus:ring-violet-400 disabled:opacity-40"
+          />
+          <Button
+            type="button"
+            size="icon"
+            disabled={isThinking || !textInput.trim()}
+            onClick={() => submitMessage(textInput)}
+            className="h-8 w-8 shrink-0 bg-violet-600 hover:bg-violet-700"
+          >
+            <Send className="h-3.5 w-3.5" />
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── Main component ───────────────────────────────────────────────────────────
 
 export function SessionNotePage({
@@ -1387,6 +1620,7 @@ export function SessionNotePage({
 
   // ── AI Chat ───────────────────────────────────────────────────────────────────
   const [showAiChat, setShowAiChat] = useState(false);
+  const [showTextChat, setShowTextChat] = useState(false);
 
   // ── Note draft (continued) ───────────────────────────────────────────────────
   const [generating, setGenerating] = useState(false);
@@ -1704,7 +1938,8 @@ export function SessionNotePage({
                 sessionId={sessionId}
                 hasExistingContent={!!noteDraft.trim()}
                 onTranscript={handleVoiceTranscript}
-                onTalkToAI={() => setShowAiChat(true)}
+                onTalkToAI={() => { setShowTextChat(false); setShowAiChat(true); }}
+                onTextChat={() => { setShowAiChat(false); setShowTextChat(true); }}
                 onRegenerate={() => generateNote()}
                 onClearNote={() => {
                   setNoteDraft("");
@@ -1712,6 +1947,37 @@ export function SessionNotePage({
                   setHasUnsavedChanges(false);
                 }}
               />
+
+              {/* Text Chat Panel */}
+              {showTextChat && (
+                <TextChatPanel
+                  sessionId={sessionId}
+                  context={{
+                    sessionDate: format(new Date(sessionDate), "MMM d, yyyy"),
+                    sessionType: SESSION_TYPE_LABELS[sessionType] ?? sessionType,
+                    durationMins: effectiveDuration,
+                    students: students.map((s) => `${s.firstName} ${s.lastName}`),
+                    goals: matchedGoals.map((mg) => {
+                      const aiExt  = aiExtractions[mg.goal.id];
+                      const ovride = goalOverrides[mg.goal.id];
+                      return {
+                        id: mg.goal.id,
+                        name: mg.goal.shortName ?? mg.goal.goalText.slice(0, 50),
+                        accuracy: goalEffectiveAccuracy(mg, aiExt, ovride),
+                        trials: goalEffectiveTrials(mg, aiExt, ovride),
+                        cueing: goalEffectiveCueing(mg, aiExt, ovride),
+                      };
+                    }),
+                    missingLabels,
+                    currentNote: noteDraft,
+                    transcript: summaryContext || undefined,
+                  }}
+                  onClose={() => setShowTextChat(false)}
+                  onApplyNote={(summary) => {
+                    augmentNote(summary);
+                  }}
+                />
+              )}
 
               {/* AI Chat Panel */}
               {showAiChat && (
