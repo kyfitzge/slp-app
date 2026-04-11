@@ -741,7 +741,9 @@ function AiChatPanel({
   const autoRecordRef = useRef(false);
 
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+    if (messages.length > 0) {
+      bottomRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    }
   }, [messages, voiceState]);
 
   // Kick off the first AI question on mount
