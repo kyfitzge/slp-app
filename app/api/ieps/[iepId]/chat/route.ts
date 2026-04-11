@@ -124,25 +124,27 @@ ${completionNote ? `\n${completionNote}` : ""}
 ═══ MANDATORY RESPONSE FORMAT ═══
 Every response must follow exactly one of these two formats. No exceptions.
 
-FORMAT A — Interview is still in progress (use this by default whenever any field is EMPTY or PARTIAL):
-[One focused question about the next most important missing field]
+FORMAT A — Interview is still in progress (use this when any field is EMPTY or PARTIAL):
 IEP_UPDATE: {"key": "value"}
+[One focused question about the next most important missing field]
 
-The question comes FIRST. IEP_UPDATE comes AFTER the question, on its own line, and only when the user's most recent answer gave you new information to record. If the previous answer gave you nothing new, omit IEP_UPDATE entirely — just ask the next question.
+IEP_UPDATE comes FIRST (before the question), and must be included whenever the user's previous message contained any usable information — even brief or partial. After IEP_UPDATE, ask one question about the next empty field.
+If the user's previous message gave you truly nothing (e.g. "okay", "sure", "I don't know"), omit IEP_UPDATE and just ask the next question.
 
 FORMAT B — Interview is complete (use ONLY when the user says done/stop/no/finished, OR every field is FILLED):
-[One brief closing sentence]
 IEP_UPDATE: {"key": "value", ...}
+[One brief closing sentence]
 
-The closing statement comes FIRST. IEP_UPDATE comes AFTER it, containing everything captured in this conversation.
+IEP_UPDATE comes FIRST, containing everything captured in this conversation. The closing sentence comes after.
 
-IMPORTANT:
-- IEP_UPDATE must NEVER be the first or only line of your response.
-- If there are still EMPTY or PARTIAL fields, always use Format A.
-- Do not close the interview early — keep asking until all fields are covered or the user stops you.
+CRITICAL RULES FOR IEP_UPDATE:
+- Any direct answer to your previous question MUST be recorded in IEP_UPDATE immediately. Do not skip it.
+- A short answer like "speaks clearly" must be documented: "Student demonstrates clear, articulate speech per clinician report."
+- Never re-ask a question that already appeared earlier in this conversation. The documentation status shows what is SAVED — not what has been discussed. Use the conversation history to know what has already been covered.
+- If you just asked about strengths and the user answered, record it and move to the next empty field. Do not ask about strengths again.
 
 ═══ WHAT GOOD FIELD COVERAGE LOOKS LIKE ═══
-Before choosing the next question, silently check which fields are still empty or partial:
+Before choosing the next question, check both: (1) which fields are EMPTY/PARTIAL in the documentation status, AND (2) which of those fields have already been discussed in this conversation. Only ask about fields that are BOTH empty AND not yet discussed.
   • Strengths: specific communication abilities with context and skill level
   • Areas of Need: named disorder/delay types with error patterns (not just "articulation")
   • Functional Impact: how communication difficulties affect academics and daily participation
@@ -155,19 +157,20 @@ Goal-to-PLAAFP alignment is a top priority — prioritize asking for data tied t
 ═══ RULES ═══
 1. Ask exactly ONE focused question per turn. Never combine questions.
 2. Never ask about information already shown as FILLED above.
-3. Extract ALL usable data points from a rich answer before asking more.
+3. Never re-ask a question already asked in this conversation, even if the field still shows EMPTY.
+4. Extract ALL usable data points from a rich answer before asking more.
    Example: "She gets 8/10 on probes with minimal cues and her teacher says she's hard to understand"
    → records Baseline (8/10, minimal cues) AND Functional Impact (intelligibility in class)
    → next question moves to the next empty field, not a follow-up on either of those
-4. Write all IEP_UPDATE field values in professional SLP documentation language:
+5. Write all IEP_UPDATE field values in professional SLP documentation language:
    — Third person: "Student demonstrates…" / "Student presents with…"
    — Specific and measurable: "60% accuracy on final consonant deletion in connected speech"
    — Standard SLP terminology: "phonological disorder," "connected speech," "structured contexts"
    — Concise and information-dense — one to two sentences per field
    — Attribute secondhand info: "per teacher report," "per parent report"
    — No AI-sounding phrases: avoid "various," "several," "overall," "it appears"
-5. If an answer is vague, use conservative language: "per clinician report" or "reportedly"
-6. Tone: direct, collegial, efficient. No preambles, no apologies, no explanation of what you are doing.
+6. If an answer is vague, use conservative language: "per clinician report" or "reportedly"
+7. Tone: direct, collegial, efficient. No preambles, no apologies, no explanation of what you are doing.
    ✓ Good: "Does ${studentName}'s final consonant deletion affect intelligibility in the classroom?"
    ✗ Bad: "Great answer! Now I'd like to ask about how this impacts his school performance."`;
 }
@@ -218,14 +221,16 @@ export async function POST(
     const fullText =
       response.content[0]?.type === "text" ? response.content[0].text.trim() : "";
 
-    // Parse IEP_UPDATE marker
+    // Parse IEP_UPDATE marker — format may be:
+    //   A) IEP_UPDATE: {...}\nQuestion   (new preferred format)
+    //   B) Question\nIEP_UPDATE: {...}   (old format, still accepted)
     const iepUpdateMarker = "IEP_UPDATE:";
     const iepUpdateIdx = fullText.indexOf(iepUpdateMarker);
 
     let reply = fullText;
     let iepUpdate: Record<string, string> | null = null;
 
-    // Default questions used when Claude omits the question before IEP_UPDATE
+    // Default questions used when Claude omits the question entirely
     const defaultQuestions: Record<string, string> = {
       strengths:            `What are ${context.studentName}'s communication strengths?`,
       areasOfNeed:          `What specific communication difficulties does ${context.studentName} present with?`,
@@ -236,16 +241,35 @@ export async function POST(
     };
 
     if (iepUpdateIdx !== -1) {
-      const jsonStr = fullText.slice(iepUpdateIdx + iepUpdateMarker.length).trim();
-      reply = fullText.slice(0, iepUpdateIdx).trim();
-      try {
-        iepUpdate = JSON.parse(jsonStr);
-      } catch {
-        iepUpdate = null;
+      const afterMarker = fullText.slice(iepUpdateIdx + iepUpdateMarker.length).trimStart();
+
+      // Robustly extract the JSON object by matching braces
+      const jsonStart = afterMarker.indexOf("{");
+      let jsonEnd = -1;
+      if (jsonStart !== -1) {
+        let depth = 0;
+        for (let i = jsonStart; i < afterMarker.length; i++) {
+          if (afterMarker[i] === "{") depth++;
+          else if (afterMarker[i] === "}") { depth--; if (depth === 0) { jsonEnd = i; break; } }
+        }
       }
 
-      // If Claude forgot to write a question before IEP_UPDATE, generate one
-      // server-side using the remaining empty fields from the context.
+      if (jsonEnd !== -1) {
+        try {
+          iepUpdate = JSON.parse(afterMarker.slice(jsonStart, jsonEnd + 1));
+        } catch {
+          iepUpdate = null;
+        }
+        // The question is whatever text falls outside the IEP_UPDATE block
+        const beforeMarker = fullText.slice(0, iepUpdateIdx).trim();
+        const afterJson = afterMarker.slice(jsonEnd + 1).trim();
+        reply = [beforeMarker, afterJson].filter(Boolean).join("\n").trim();
+      } else {
+        // JSON extraction failed — treat entire non-marker text as reply
+        reply = fullText.slice(0, iepUpdateIdx).trim();
+      }
+
+      // If no question text came through at all, generate one server-side
       if (!reply) {
         const justCaptured = new Set(Object.keys(iepUpdate ?? {}));
         const remaining = (context.fieldStatus ?? []).filter(
