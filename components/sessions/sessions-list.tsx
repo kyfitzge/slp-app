@@ -232,12 +232,6 @@ function SessionItem({ session }: { session: SessionRow }) {
           ) : null}
         </div>
 
-        {/* Note preview */}
-        {status === "in_progress" && session.notes[0]?.noteText && (
-          <p className="text-xs text-muted-foreground line-clamp-1 italic">
-            &ldquo;{session.notes[0].noteText.trim()}&rdquo;
-          </p>
-        )}
       </div>
 
       {/* Chevron indicator */}
