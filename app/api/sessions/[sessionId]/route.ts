@@ -32,6 +32,7 @@ export async function PUT(
     const data: Record<string, any> = {};
     if (body.sessionDate    !== undefined) data.sessionDate    = new Date(body.sessionDate + "T12:00:00");
     if (body.startTime      !== undefined) data.startTime      = body.startTime;
+    if (body.sessionType    !== undefined) data.sessionType    = body.sessionType;
     if (body.durationMins   !== undefined) data.durationMins   = Number(body.durationMins);
     if (body.generalNotes   !== undefined) data.generalNotes   = body.generalNotes;
     if (body.location       !== undefined) data.location       = body.location;

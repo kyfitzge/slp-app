@@ -433,7 +433,7 @@ function VoiceCapture({
                 size="sm"
                 variant="outline"
                 onClick={onRegenerate}
-                className="w-full gap-2 justify-center"
+                className="w-full gap-2 justify-center text-violet-600 border-violet-300 hover:bg-violet-50"
               >
                 <RefreshCw className="h-3.5 w-3.5" />
                 Regenerate with AI
@@ -1188,6 +1188,8 @@ export function SessionNotePage({
   // ── Location / setting override ──────────────────────────────────────────────
   // Allows editing the session setting directly from the structured data panel.
   const [locationOverride, setLocationOverride] = useState<string | null>(null);
+  const [durationOverride, setDurationOverride] = useState<number | null>(null);
+  const [sessionTypeOverride, setSessionTypeOverride] = useState<string | null>(null);
 
   async function saveLocation(value: string) {
     const trimmed = value.trim() || null;
@@ -1200,6 +1202,34 @@ export function SessionNotePage({
       });
     } catch {
       toast.error("Failed to save setting");
+    }
+  }
+
+  async function saveDuration(value: string) {
+    const mins = parseInt(value) || null;
+    setDurationOverride(mins);
+    try {
+      await fetch(`/api/sessions/${sessionId}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ durationMins: mins }),
+      });
+    } catch {
+      toast.error("Failed to save duration");
+    }
+  }
+
+  async function saveSessionType(value: string) {
+    const trimmed = value.trim() || null;
+    setSessionTypeOverride(trimmed);
+    try {
+      await fetch(`/api/sessions/${sessionId}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sessionType: trimmed }),
+      });
+    } catch {
+      toast.error("Failed to save session type");
     }
   }
   const activeContext = summaryContext || noteExtractionContext;
@@ -1244,12 +1274,17 @@ export function SessionNotePage({
       goals = allGoals.filter((g) => !!initialGoalData[g.id]);
     }
 
-    return goals.map((goal) => ({
-      goal,
-      extracted: extractDataForGoal(activeContext, goal),
-      saved: initialGoalData[goal.id],
-    }));
-  }, [summaryContext, noteExtractionContext, activeContext, allGoals, initialGoalData]);
+    return goals.map((goal) => {
+      const fromContext = extractDataForGoal(activeContext, goal);
+      // Also scan the note draft — AI-generated notes often contain data not in the raw transcript
+      const fromNote = noteDraft.trim() ? extractDataForGoal(noteDraft, goal) : {};
+      const extracted: ExtractedData = {
+        ...fromNote,
+        ...Object.fromEntries(Object.entries(fromContext).filter(([, v]) => v != null)),
+      };
+      return { goal, extracted, saved: initialGoalData[goal.id] };
+    });
+  }, [summaryContext, noteExtractionContext, activeContext, noteDraft, allGoals, initialGoalData]);
 
   // ── LLM-extracted structured data (keyed by goalId) ────────────────────────
   const [aiExtractions, setAiExtractions] = useState<Record<string, GoalAIExt>>({});
@@ -1505,9 +1540,10 @@ export function SessionNotePage({
   const hasAnyGoalTrials   = matchedGoals.some((mg) => goalEffectiveTrials(mg,   aiExtractions[mg.goal.id], goalOverrides[mg.goal.id]) != null);
   const hasAnyGoalCueing   = matchedGoals.some((mg) => goalEffectiveCueing(mg,   aiExtractions[mg.goal.id], goalOverrides[mg.goal.id]) != null);
 
-  const effectiveDuration = durationMins || aiSessionData.duration || extracted.durationMins || null;
+  const effectiveDuration = durationOverride || durationMins || aiSessionData.duration || extracted.durationMins || null;
   // Use || instead of ?? so empty strings ("") also fall through to the next source
   const effectiveLocation = locationOverride || location || extracted.setting || null;
+  const effectiveSessionType = sessionTypeOverride || sessionType;
 
   const missingLabels: string[] = [];
   if (!effectiveLocation) missingLabels.push("Setting");
@@ -1727,9 +1763,14 @@ export function SessionNotePage({
                 </p>
                 <div className="rounded-lg border divide-y">
                   <FieldRow icon={CalendarDays} label="Date" value={formatDate(new Date(sessionDate))} />
-                  <FieldRow icon={Clock} label="Duration"
-                    value={effectiveDuration ? `${effectiveDuration} min` : null}
+                  <EditableFieldRow
+                    icon={Clock}
+                    label="Duration"
+                    rawValue={effectiveDuration ? String(effectiveDuration) : ""}
+                    displayValue={effectiveDuration ? `${effectiveDuration} min` : undefined}
                     missing={!effectiveDuration}
+                    placeholder="e.g. 30"
+                    onSave={saveDuration}
                   />
                   <EditableFieldRow
                     icon={MapPin}
@@ -1740,8 +1781,14 @@ export function SessionNotePage({
                     placeholder="e.g. Speech Room"
                     onSave={saveLocation}
                   />
-                  <FieldRow icon={Info} label="Type"
-                    value={SESSION_TYPE_LABELS[sessionType] ?? sessionType.replace(/_/g, " ")}
+                  <EditableFieldRow
+                    icon={Info}
+                    label="Type"
+                    rawValue={effectiveSessionType}
+                    displayValue={SESSION_TYPE_LABELS[effectiveSessionType] ?? effectiveSessionType.replace(/_/g, " ")}
+                    editType="select"
+                    editOptions={Object.entries(SESSION_TYPE_LABELS).map(([value, label]) => ({ value, label }))}
+                    onSave={saveSessionType}
                   />
                   {/* Students + attendance */}
                   <div className="px-4 py-3">
