@@ -9,6 +9,7 @@ export async function getAllProgressReports(userId: string) {
       periodLabel: true,
       periodStartDate: true,
       periodEndDate: true,
+      summaryText: true,
       isDraft: true,
       finalizedAt: true,
       createdAt: true,

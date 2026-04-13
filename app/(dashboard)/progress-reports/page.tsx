@@ -16,6 +16,7 @@ export default async function ProgressReportsRoute() {
     periodLabel: r.periodLabel,
     periodStartDate: r.periodStartDate.toISOString(),
     periodEndDate: r.periodEndDate.toISOString(),
+    summaryText: r.summaryText ?? null,
     isDraft: r.isDraft,
     finalizedAt: r.finalizedAt ? r.finalizedAt.toISOString() : null,
     createdAt: r.createdAt.toISOString(),
