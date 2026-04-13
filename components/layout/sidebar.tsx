@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import {
   LayoutDashboard,
   ClipboardList,
+  FileText,
   Settings,
   LogOut,
   Activity,
@@ -15,8 +16,9 @@ import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 
 const navItems = [
-  { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
-  { href: "/sessions",  label: "Session Notes",  icon: ClipboardList },
+  { href: "/dashboard",        label: "Dashboard",        icon: LayoutDashboard },
+  { href: "/sessions",         label: "Session Notes",    icon: ClipboardList   },
+  { href: "/progress-reports", label: "Progress Reports", icon: FileText        },
 ];
 
 interface SidebarProps {

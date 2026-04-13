@@ -2524,14 +2524,33 @@ export function SessionNotePage({
               <p className="text-xs text-green-700">Note saved to this session.</p>
             </div>
           </div>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => setCompleted(false)}
-            className="shrink-0 text-xs border-green-300 text-green-800 hover:bg-green-100"
-          >
-            Mark Incomplete
-          </Button>
+          <div className="flex items-center gap-2 shrink-0">
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={!noteDraft.trim()}
+              onClick={async () => {
+                if (!noteDraft.trim()) return;
+                try {
+                  await persistNote(noteDraft);
+                  toast.success("Note saved");
+                } catch {
+                  toast.error("Failed to save");
+                }
+              }}
+              className="text-xs border-green-300 text-green-800 hover:bg-green-100"
+            >
+              Save
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setCompleted(false)}
+              className="text-xs border-green-300 text-green-800 hover:bg-green-100"
+            >
+              Mark Incomplete
+            </Button>
+          </div>
         </div>
       ) : (
         <div className="rounded-xl border bg-card px-5 py-4">

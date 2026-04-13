@@ -93,9 +93,10 @@ function buildSystemPrompt(ctx: IEPChatContext): string {
 
   // ── Field status section ───────────────────────────────────────────────────────
   const fieldStatusSection = fieldStatus.map((f) => {
-    if (f.quality === "empty")    return `• ${f.label}: EMPTY`;
-    if (f.quality === "partial")  return `• ${f.label}: PARTIAL — "${f.preview}"`;
-    return                               `• ${f.label}: FILLED — "${f.preview}"`;
+    // Show the JSON key name next to each label so Claude knows exactly what key to use in IEP_UPDATE
+    if (f.quality === "empty")    return `• ${f.label} (key: "${f.key}"): EMPTY`;
+    if (f.quality === "partial")  return `• ${f.label} (key: "${f.key}"): PARTIAL — "${f.preview}"`;
+    return                               `• ${f.label} (key: "${f.key}"): FILLED — "${f.preview}"`;
   }).join("\n");
 
   const hasEmpty   = fieldStatus.some((f) => f.quality === "empty");
@@ -121,18 +122,27 @@ ${domainGuidanceSection ? `\n═══ GOAL-TO-PLAAFP GUIDANCE ═══\n${doma
 ${fieldStatusSection}
 ${completionNote ? `\n${completionNote}` : ""}
 
+═══ VALID IEP_UPDATE KEYS ═══
+You MUST use ONLY these exact key names (case-sensitive) inside IEP_UPDATE JSON:
+  "strengths"            → Strengths
+  "areasOfNeed"          → Areas of Need
+  "functionalImpact"     → Academic & Functional Impact
+  "baselinePerformance"  → Baseline Performance
+  "communicationProfile" → Communication Profile
+  "parentConcerns"       → Parent & Guardian Concerns
+
 ═══ MANDATORY RESPONSE FORMAT ═══
 Every response must follow exactly one of these two formats. No exceptions.
 
 FORMAT A — Interview is still in progress (use this when any field is EMPTY or PARTIAL):
-IEP_UPDATE: {"key": "value"}
+IEP_UPDATE: {"areasOfNeed": "Student presents with..."}
 [One focused question about the next most important missing field]
 
 IEP_UPDATE comes FIRST (before the question), and must be included whenever the user's previous message contained any usable information — even brief or partial. After IEP_UPDATE, ask one question about the next empty field.
 If the user's previous message gave you truly nothing (e.g. "okay", "sure", "I don't know"), omit IEP_UPDATE and just ask the next question.
 
 FORMAT B — Interview is complete (use ONLY when the user says done/stop/no/finished, OR every field is FILLED):
-IEP_UPDATE: {"key": "value", ...}
+IEP_UPDATE: {"strengths": "...", "areasOfNeed": "...", "functionalImpact": "..."}
 [One brief closing sentence]
 
 IEP_UPDATE comes FIRST, containing everything captured in this conversation. The closing sentence comes after.

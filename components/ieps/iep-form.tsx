@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -147,48 +147,54 @@ interface IEPFormProps {
   studentId: string;
   iepId?: string;
   defaultValues?: Partial<CreateIEPInput>;
+  /** When provided the form is CONTROLLED — the parent owns the state.
+   *  When omitted the form falls back to its own internal state (new-IEP page). */
   plaafp?: PLAAFPState;
   onPlaafpChange?: (state: PLAAFPState) => void;
   parentConcerns?: string;
   onParentConcernsChange?: (text: string) => void;
 }
 
-export function IEPForm({ studentId, iepId, defaultValues, plaafp: plaafpProp, onPlaafpChange, parentConcerns: parentConcernsProp, onParentConcernsChange }: IEPFormProps) {
+export function IEPForm({
+  studentId,
+  iepId,
+  defaultValues,
+  plaafp: plaafpProp,
+  onPlaafpChange,
+  parentConcerns: parentConcernsProp,
+  onParentConcernsChange,
+}: IEPFormProps) {
   const router = useRouter();
   const isEditing = !!iepId;
 
   const today = format(new Date(), "yyyy-MM-dd");
   const oneYearFromNow = format(addYears(new Date(), 1), "yyyy-MM-dd");
 
-  // IEPForm is always internally-state-driven so textareas reliably reflect
-  // both user edits AND programmatic updates from the AI assistant.
-  // When a parent provides plaafpProp (edit page), we initialise from it and
-  // keep in sync via useEffect.  When there is no prop (new IEP page) we fall
-  // back to parsing defaultValues.
-  const [plaafp, setPlaafpState] = useState<PLAAFPState>(
-    () => plaafpProp ?? parsePLAAFPForForm(defaultValues?.presentLevels)
+  // ── Controlled / uncontrolled pattern for PLAAFP + parent concerns ──────────
+  // When a parent passes `plaafp` (IEP view/edit page with AI chat), this form is
+  // CONTROLLED — it renders the parent's state directly, so any `setPlaafp` call
+  // in the parent immediately shows in the textarea. No internal copy, no useEffect.
+  //
+  // When no prop is provided (new IEP page), the form manages its own state.
+  const isControlled = plaafpProp !== undefined;
+
+  const [internalPlaafp, setInternalPlaafp] = useState<PLAAFPState>(
+    () => parsePLAAFPForForm(defaultValues?.presentLevels)
   );
-  const [parentConcerns, setParentConcernsState] = useState<string>(
-    parentConcernsProp ?? defaultValues?.parentConcerns ?? ""
+  const [internalParentConcerns, setInternalParentConcerns] = useState<string>(
+    defaultValues?.parentConcerns ?? ""
   );
 
-  // Sync whenever the parent (AI assistant) pushes updated values in.
-  useEffect(() => {
-    if (plaafpProp !== undefined) setPlaafpState(plaafpProp);
-  }, [plaafpProp]);
+  // The values actually rendered in the textareas
+  const plaafp = isControlled ? plaafpProp : internalPlaafp;
+  const parentConcerns = parentConcernsProp !== undefined ? parentConcernsProp : internalParentConcerns;
 
-  useEffect(() => {
-    if (parentConcernsProp !== undefined) setParentConcernsState(parentConcernsProp);
-  }, [parentConcernsProp]);
-
-  // When the user edits a field, update both local state AND notify the parent
-  // (so the AI context sees the latest values on the next turn).
   function handlePlaafpChange(next: PLAAFPState) {
-    setPlaafpState(next);
+    if (!isControlled) setInternalPlaafp(next);
     onPlaafpChange?.(next);
   }
   function handleParentConcernsChange(next: string) {
-    setParentConcernsState(next);
+    if (parentConcernsProp === undefined) setInternalParentConcerns(next);
     onParentConcernsChange?.(next);
   }
 

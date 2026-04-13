@@ -6,7 +6,7 @@ import { getUpcomingIEPReviews } from "@/lib/queries/ieps";
 import { getSessionsForCalendar } from "@/lib/queries/sessions";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { CaseloadPanel } from "@/components/dashboard/caseload-panel";
+import { CaseloadSidePanel } from "@/components/shared/caseload-side-panel";
 import { DashboardCalendar } from "@/components/dashboard/dashboard-calendar";
 import { AlertTriangle, Calendar, Plus, Users } from "lucide-react";
 import { getUrgencyLevel } from "@/lib/utils/format-date";
@@ -87,11 +87,12 @@ export default async function DashboardPage() {
               </Link>
             </CardTitle>
           </CardHeader>
-          <CardContent className="flex-1 min-h-0 overflow-hidden pt-0">
-            <p className="text-xs text-muted-foreground mb-3 italic">
+          <CardContent className="flex-1 min-h-0 overflow-hidden pt-0 flex flex-col">
+            <p className="text-xs text-muted-foreground mb-3 italic shrink-0">
               Drag a name onto the calendar to schedule a session
             </p>
-            <CaseloadPanel
+            <CaseloadSidePanel
+              draggable
               students={students.map(s => ({
                 id:        s.id,
                 firstName: s.firstName,
