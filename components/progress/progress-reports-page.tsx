@@ -22,6 +22,9 @@ import {
   Bot,
   History,
   PenLine,
+  ChevronDown,
+  ChevronUp,
+  Plus,
 } from "lucide-react";
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
@@ -69,75 +72,6 @@ interface Props {
   students: StudentOption[];
 }
 
-// ─── Historical report card ────────────────────────────────────────────────────
-
-function ReportCard({
-  report,
-  isActive,
-  onLoad,
-  onDelete,
-}: {
-  report: ReportListItem;
-  isActive: boolean;
-  onLoad: () => void;
-  onDelete: () => void;
-}) {
-  const excerpt = report.summaryText?.trim().slice(0, 100);
-  const hasExcerpt = excerpt && excerpt.length > 0;
-
-  return (
-    <button
-      onClick={onLoad}
-      className={cn(
-        "group relative w-full rounded-lg border p-2.5 text-left text-xs transition-colors",
-        isActive
-          ? "border-primary/40 bg-primary/5"
-          : "border-border bg-card hover:bg-muted/40"
-      )}
-    >
-      {/* Top row: badge + delete */}
-      <div className="flex items-center justify-between gap-1 mb-1">
-        <div className="flex items-center gap-1.5">
-          {report.isDraft ? (
-            <Badge variant="outline" className="text-[10px] h-4 px-1.5 border-amber-200 bg-amber-50 text-amber-700">
-              Draft
-            </Badge>
-          ) : (
-            <Badge variant="outline" className="text-[10px] h-4 px-1.5 border-emerald-200 bg-emerald-50 text-emerald-700">
-              Final
-            </Badge>
-          )}
-        </div>
-        <button
-          onClick={(e) => { e.stopPropagation(); onDelete(); }}
-          className="hidden group-hover:flex items-center justify-center h-5 w-5 rounded text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors"
-        >
-          <Trash2 className="h-3 w-3" />
-        </button>
-      </div>
-
-      {/* Period label */}
-      <p className="font-semibold text-foreground truncate leading-tight">
-        {report.periodLabel}
-      </p>
-
-      {/* Date range */}
-      <p className="text-muted-foreground/70 mb-1">
-        {formatDate(report.periodStartDate)} – {formatDate(report.periodEndDate)}
-      </p>
-
-      {/* Text excerpt */}
-      {hasExcerpt ? (
-        <p className="text-muted-foreground leading-relaxed line-clamp-2">
-          {excerpt}{(report.summaryText?.length ?? 0) > 100 ? "…" : ""}
-        </p>
-      ) : (
-        <p className="text-muted-foreground/40 italic">No content yet</p>
-      )}
-    </button>
-  );
-}
-
 // ─── Main component ─────────────────────────────────────────────────────────────
 
 export function ProgressReportsPage({ initialReports, students }: Props) {
@@ -158,6 +92,7 @@ export function ProgressReportsPage({ initialReports, students }: Props) {
   const [isSaving, setIsSaving] = useState(false);
   const [isLoadingReport, setIsLoadingReport] = useState(false);
   const [metadata, setMetadata] = useState<GenerateMetadata | null>(null);
+  const [showHistory, setShowHistory] = useState(false);
 
   const reportsByStudent = useMemo(() => {
     const map: Record<string, ReportListItem[]> = {};
@@ -174,6 +109,7 @@ export function ProgressReportsPage({ initialReports, students }: Props) {
   function resetEditor() {
     setEditor({ reportId: null, title: "", startDate: "", endDate: today, text: "", isAiGenerated: false, isDraft: true });
     setMetadata(null);
+    setShowHistory(false);
   }
 
   function handleSelectStudent(id: string) {
@@ -184,6 +120,7 @@ export function ProgressReportsPage({ initialReports, students }: Props) {
 
   async function handleLoadReport(reportId: string) {
     setIsLoadingReport(true);
+    setShowHistory(false);
     try {
       const res = await fetch(`/api/progress-reports/${reportId}`);
       if (!res.ok) throw new Error("Failed to load");
@@ -353,10 +290,10 @@ export function ProgressReportsPage({ initialReports, students }: Props) {
         </div>
       </div>
 
-      {/* Three-column layout: Caseload | Past Reports | Editor */}
-      <div className="grid grid-cols-1 lg:grid-cols-[320px_260px_1fr] gap-4 flex-1 min-h-0">
+      {/* Two-column layout */}
+      <div className="grid grid-cols-1 lg:grid-cols-[320px_1fr] gap-4 flex-1 min-h-0">
 
-        {/* ── COL 1: Caseload ── */}
+        {/* ── LEFT: Caseload ── */}
         <Card className="flex flex-col min-h-0">
           <CardHeader className="pb-3 shrink-0">
             <CardTitle className="text-sm font-semibold flex items-center gap-2">
@@ -377,214 +314,252 @@ export function ProgressReportsPage({ initialReports, students }: Props) {
           </CardContent>
         </Card>
 
-        {/* ── COL 2: Past Reports (vertical) ── */}
-        <Card className="flex flex-col min-h-0">
-          <CardHeader className="pb-3 shrink-0">
-            <CardTitle className="text-sm font-semibold flex items-center gap-2">
-              <History className="h-4 w-4" />
-              Past Reports
-            </CardTitle>
-            {selectedStudent && (
-              <p className="text-xs text-muted-foreground mt-1">
-                {selectedStudent.firstName} {selectedStudent.lastName}
-              </p>
-            )}
-          </CardHeader>
-          <CardContent className="flex-1 min-h-0 overflow-y-auto pt-0 flex flex-col gap-2 px-3">
-            {!selectedStudentId ? (
-              <div className="flex-1 flex items-center justify-center py-10 text-center">
-                <p className="text-xs text-muted-foreground">
-                  Select a student to see their reports
-                </p>
-              </div>
-            ) : studentReports.length === 0 ? (
-              <div className="flex-1 flex flex-col items-center justify-center py-10 text-center">
-                <FileText className="h-7 w-7 text-muted-foreground/20 mb-2" />
-                <p className="text-xs text-muted-foreground">No reports yet</p>
-              </div>
-            ) : (
-              studentReports.map((report) => (
-                <ReportCard
-                  key={report.id}
-                  report={report}
-                  isActive={editor.reportId === report.id}
-                  onLoad={() => handleLoadReport(report.id)}
-                  onDelete={() => handleDelete(report.id)}
-                />
-              ))
-            )}
-          </CardContent>
-        </Card>
-
-        {/* ── COL 3: Editor Draft Box ── */}
+        {/* ── RIGHT: Editor ── */}
         <div className="flex flex-col min-h-0 overflow-hidden rounded-xl border bg-card">
-            {!selectedStudentId ? (
-              <div className="flex-1 flex flex-col items-center justify-center text-center p-8">
-                <PenLine className="h-10 w-10 text-muted-foreground/20 mb-3" />
-                <p className="text-sm font-medium text-muted-foreground mb-1">
-                  Select a student to start writing
-                </p>
-                <p className="text-xs text-muted-foreground max-w-xs">
-                  Choose a student from the caseload to open the report editor.
-                </p>
-              </div>
-            ) : isLoadingReport ? (
-              <div className="flex-1 flex items-center justify-center">
-                <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-              </div>
-            ) : (
-              <>
-                {/* Header */}
-                <div className="flex items-center gap-2.5 px-5 py-3.5 bg-primary/5 border-b border-primary/10 shrink-0">
-                  <div className="flex items-center justify-center h-7 w-7 rounded-lg bg-primary/10 shrink-0">
-                    <FileText className="h-4 w-4 text-primary" />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-semibold">Progress Report Draft</p>
-                    <p className="text-xs text-muted-foreground">
-                      {selectedStudent?.firstName} {selectedStudent?.lastName}
-                      {editor.startDate && editor.endDate
-                        ? ` · ${formatDate(editor.startDate)} – ${formatDate(editor.endDate)}`
-                        : " · Set a date range below"}
-                    </p>
-                  </div>
+          {!selectedStudentId ? (
+            <div className="flex-1 flex flex-col items-center justify-center text-center p-8">
+              <PenLine className="h-10 w-10 text-muted-foreground/20 mb-3" />
+              <p className="text-sm font-medium text-muted-foreground mb-1">
+                Select a student to start writing
+              </p>
+              <p className="text-xs text-muted-foreground max-w-xs">
+                Choose a student from the caseload to open the report editor.
+              </p>
+            </div>
+          ) : isLoadingReport ? (
+            <div className="flex-1 flex items-center justify-center">
+              <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+            </div>
+          ) : (
+            <>
+              {/* ── Header ── */}
+              <div className="flex items-center gap-2.5 px-5 py-3.5 bg-primary/5 border-b border-primary/10 shrink-0">
+                <div className="flex items-center justify-center h-7 w-7 rounded-lg bg-primary/10 shrink-0">
+                  <FileText className="h-4 w-4 text-primary" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-semibold">Progress Report Draft</p>
+                  <p className="text-xs text-muted-foreground">
+                    {selectedStudent?.firstName} {selectedStudent?.lastName}
+                    {editor.startDate && editor.endDate
+                      ? ` · ${formatDate(editor.startDate)} – ${formatDate(editor.endDate)}`
+                      : " · Set a date range below"}
+                  </p>
+                </div>
+                <div className="flex items-center gap-2 shrink-0">
                   {!editor.isDraft && editor.reportId && (
-                    <Badge variant="outline" className="text-xs border-emerald-200 bg-emerald-50 text-emerald-700 shrink-0">
+                    <Badge variant="outline" className="text-xs border-emerald-200 bg-emerald-50 text-emerald-700">
                       Finalized
                     </Badge>
                   )}
+                  {/* History toggle — only shown when past reports exist */}
+                  {studentReports.length > 0 && (
+                    <button
+                      onClick={() => setShowHistory((v) => !v)}
+                      className={cn(
+                        "flex items-center gap-1.5 rounded-md px-2.5 py-1 text-xs font-medium transition-colors border",
+                        showHistory
+                          ? "bg-primary/10 text-primary border-primary/20"
+                          : "bg-card text-muted-foreground border-border hover:bg-muted hover:text-foreground"
+                      )}
+                    >
+                      <History className="h-3.5 w-3.5" />
+                      {studentReports.length} past
+                      {showHistory
+                        ? <ChevronUp className="h-3 w-3" />
+                        : <ChevronDown className="h-3 w-3" />}
+                    </button>
+                  )}
+                  {/* New report — only shown when a report is loaded */}
+                  {editor.reportId && (
+                    <button
+                      onClick={resetEditor}
+                      className="flex items-center gap-1.5 rounded-md px-2.5 py-1 text-xs font-medium text-muted-foreground border border-border hover:bg-muted hover:text-foreground transition-colors"
+                    >
+                      <Plus className="h-3.5 w-3.5" />
+                      New
+                    </button>
+                  )}
                 </div>
+              </div>
 
-                {/* Content */}
-                <div className="flex flex-col flex-1 min-h-0 p-5 gap-4">
+              {/* ── History dropdown panel ── */}
+              {showHistory && (
+                <div className="shrink-0 border-b bg-muted/20 max-h-56 overflow-y-auto">
+                  <div className="flex flex-col divide-y divide-border/60">
+                    {studentReports.map((report) => (
+                      <button
+                        key={report.id}
+                        onClick={() => handleLoadReport(report.id)}
+                        className={cn(
+                          "group flex items-start gap-3 px-5 py-3 text-left text-xs transition-colors hover:bg-muted/50",
+                          editor.reportId === report.id && "bg-primary/5"
+                        )}
+                      >
+                        <div className="flex-1 min-w-0 space-y-0.5">
+                          <div className="flex items-center gap-2">
+                            {report.isDraft ? (
+                              <Badge variant="outline" className="text-[10px] h-4 px-1.5 border-amber-200 bg-amber-50 text-amber-700 shrink-0">
+                                Draft
+                              </Badge>
+                            ) : (
+                              <Badge variant="outline" className="text-[10px] h-4 px-1.5 border-emerald-200 bg-emerald-50 text-emerald-700 shrink-0">
+                                Final
+                              </Badge>
+                            )}
+                            <span className="font-medium text-foreground truncate">{report.periodLabel}</span>
+                          </div>
+                          <p className="text-muted-foreground">
+                            {formatDate(report.periodStartDate)} – {formatDate(report.periodEndDate)}
+                          </p>
+                          {report.summaryText && (
+                            <p className="text-muted-foreground/70 line-clamp-1">
+                              {report.summaryText.trim().slice(0, 120)}{report.summaryText.length > 120 ? "…" : ""}
+                            </p>
+                          )}
+                        </div>
+                        <button
+                          onClick={(e) => { e.stopPropagation(); handleDelete(report.id); }}
+                          className="hidden group-hover:flex items-center justify-center h-6 w-6 rounded text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors shrink-0 mt-0.5"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </button>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
 
-                  {/* Title + date range */}
-                  <div className="shrink-0 flex flex-col sm:flex-row gap-2">
-                    <Input
-                      placeholder="Report title — e.g. Q1 2026, Fall 2025"
-                      value={editor.title}
-                      onChange={(e) => setEditor((prev) => ({ ...prev, title: e.target.value }))}
-                      className="h-8 text-sm flex-1"
-                      disabled={!editor.isDraft && !!editor.reportId}
-                    />
-                    <div className="flex gap-2 shrink-0">
-                      <div className="flex items-center gap-1.5">
-                        <Label className="text-xs text-muted-foreground whitespace-nowrap">From</Label>
-                        <Input
-                          type="date"
-                          value={editor.startDate}
-                          onChange={(e) => setEditor((prev) => ({ ...prev, startDate: e.target.value }))}
-                          className="h-8 text-sm w-36"
-                          disabled={!editor.isDraft && !!editor.reportId}
-                        />
-                      </div>
-                      <div className="flex items-center gap-1.5">
-                        <Label className="text-xs text-muted-foreground whitespace-nowrap">To</Label>
-                        <Input
-                          type="date"
-                          value={editor.endDate}
-                          onChange={(e) => setEditor((prev) => ({ ...prev, endDate: e.target.value }))}
-                          className="h-8 text-sm w-36"
-                          disabled={!editor.isDraft && !!editor.reportId}
-                        />
-                      </div>
+              {/* ── Content ── */}
+              <div className="flex flex-col flex-1 min-h-0 p-5 gap-4">
+
+                {/* Title + date range */}
+                <div className="shrink-0 flex flex-col sm:flex-row gap-2">
+                  <Input
+                    placeholder="Report title — e.g. Q1 2026, Fall 2025"
+                    value={editor.title}
+                    onChange={(e) => setEditor((prev) => ({ ...prev, title: e.target.value }))}
+                    className="h-8 text-sm flex-1"
+                    disabled={!editor.isDraft && !!editor.reportId}
+                  />
+                  <div className="flex gap-2 shrink-0">
+                    <div className="flex items-center gap-1.5">
+                      <Label className="text-xs text-muted-foreground whitespace-nowrap">From</Label>
+                      <Input
+                        type="date"
+                        value={editor.startDate}
+                        onChange={(e) => setEditor((prev) => ({ ...prev, startDate: e.target.value }))}
+                        className="h-8 text-sm w-36"
+                        disabled={!editor.isDraft && !!editor.reportId}
+                      />
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                      <Label className="text-xs text-muted-foreground whitespace-nowrap">To</Label>
+                      <Input
+                        type="date"
+                        value={editor.endDate}
+                        onChange={(e) => setEditor((prev) => ({ ...prev, endDate: e.target.value }))}
+                        className="h-8 text-sm w-36"
+                        disabled={!editor.isDraft && !!editor.reportId}
+                      />
                     </div>
                   </div>
+                </div>
 
-                  {/* Action buttons */}
-                  <div className="shrink-0 flex items-center gap-2 flex-wrap">
-                    {(editor.isDraft || !editor.reportId) && (
-                      <>
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          disabled={!canGenerate || isGenerating}
-                          onClick={handleGenerate}
-                          className="gap-1.5 h-8 text-xs text-violet-500 hover:text-violet-700 hover:bg-violet-50"
-                        >
-                          {isGenerating
-                            ? <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Generating…</>
-                            : <><Sparkles className="h-3.5 w-3.5" /> {editor.text ? "Regenerate" : "Generate"}</>
-                          }
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          disabled={!canSave || isSaving}
-                          onClick={() => handleSave(false)}
-                          className="gap-1.5 h-8 text-xs hover:bg-muted"
-                        >
-                          {isSaving ? "Saving…" : "Save Draft"}
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          disabled={!canSave || isSaving}
-                          onClick={() => handleSave(true)}
-                          className="gap-1.5 h-8 text-xs text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50"
-                        >
-                          Finalize
-                        </Button>
-                      </>
+                {/* Action buttons */}
+                <div className="shrink-0 flex items-center gap-2 flex-wrap">
+                  {(editor.isDraft || !editor.reportId) && (
+                    <>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        disabled={!canGenerate || isGenerating}
+                        onClick={handleGenerate}
+                        className="gap-1.5 h-8 text-xs text-violet-500 hover:text-violet-700 hover:bg-violet-50"
+                      >
+                        {isGenerating
+                          ? <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Generating…</>
+                          : <><Sparkles className="h-3.5 w-3.5" /> {editor.text ? "Regenerate" : "Generate"}</>
+                        }
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        disabled={!canSave || isSaving}
+                        onClick={() => handleSave(false)}
+                        className="gap-1.5 h-8 text-xs hover:bg-muted"
+                      >
+                        {isSaving ? "Saving…" : "Save Draft"}
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        disabled={!canSave || isSaving}
+                        onClick={() => handleSave(true)}
+                        className="gap-1.5 h-8 text-xs text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50"
+                      >
+                        Finalize
+                      </Button>
+                    </>
+                  )}
+                  {metadata && (
+                    <span className="ml-auto text-xs text-muted-foreground">
+                      {metadata.sessionCount} session{metadata.sessionCount !== 1 ? "s" : ""} · {metadata.goalsUsed.length} goal{metadata.goalsUsed.length !== 1 ? "s" : ""}
+                    </span>
+                  )}
+                </div>
+
+                {/* Textarea + AI label + word count */}
+                <div className="flex-1 min-h-0 flex flex-col gap-1.5">
+                  <Textarea
+                    value={editor.text}
+                    onChange={(e) => setEditor((prev) => ({ ...prev, text: e.target.value }))}
+                    placeholder={
+                      !editor.isDraft && editor.reportId
+                        ? "This report has been finalized."
+                        : "Start writing, or click Generate to create an AI-assisted draft from session data."
+                    }
+                    readOnly={!editor.isDraft && !!editor.reportId}
+                    className={cn(
+                      "flex-1 resize-none text-sm leading-relaxed font-sans min-h-0",
+                      !editor.isDraft && !!editor.reportId && "opacity-75 cursor-default"
                     )}
-                    {metadata && (
-                      <span className="ml-auto text-xs text-muted-foreground">
-                        {metadata.sessionCount} session{metadata.sessionCount !== 1 ? "s" : ""} · {metadata.goalsUsed.length} goal{metadata.goalsUsed.length !== 1 ? "s" : ""}
+                  />
+                  <div className="flex items-center justify-between shrink-0">
+                    {editor.isAiGenerated ? (
+                      <span className="text-xs text-muted-foreground/70 italic flex items-center gap-1">
+                        <Bot className="h-3 w-3" />
+                        AI-generated — review and edit before saving
+                      </span>
+                    ) : <span />}
+                    {editor.text && (
+                      <span className="text-xs text-muted-foreground">
+                        {editor.text.trim().split(/\s+/).filter(Boolean).length} words
                       </span>
                     )}
                   </div>
-
-                  {/* Textarea + AI label + word count */}
-                  <div className="flex-1 min-h-0 flex flex-col gap-1.5">
-                    <Textarea
-                      value={editor.text}
-                      onChange={(e) => setEditor((prev) => ({ ...prev, text: e.target.value }))}
-                      placeholder={
-                        !editor.isDraft && editor.reportId
-                          ? "This report has been finalized."
-                          : "Start writing, or click Generate to create an AI-assisted draft from session data."
-                      }
-                      readOnly={!editor.isDraft && !!editor.reportId}
-                      className={cn(
-                        "flex-1 resize-none text-sm leading-relaxed font-sans min-h-0",
-                        !editor.isDraft && !!editor.reportId && "opacity-75 cursor-default"
-                      )}
-                    />
-                    <div className="flex items-center justify-between shrink-0">
-                      {editor.isAiGenerated ? (
-                        <span className="text-xs text-muted-foreground/70 italic flex items-center gap-1">
-                          <Bot className="h-3 w-3" />
-                          AI-generated — review and edit before saving
-                        </span>
-                      ) : <span />}
-                      {editor.text && (
-                        <span className="text-xs text-muted-foreground">
-                          {editor.text.trim().split(/\s+/).filter(Boolean).length} words
-                        </span>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* Warnings */}
-                  {metadata && (metadata.dataWarnings.length > 0 || metadata.hasLimitedData) && (
-                    <div className="shrink-0 border-t pt-3 space-y-1.5">
-                      {metadata.dataWarnings.map((w, i) => (
-                        <div key={i} className="flex items-start gap-1.5 text-xs text-amber-700">
-                          <AlertTriangle className="h-3 w-3 shrink-0 mt-0.5" /> {w}
-                        </div>
-                      ))}
-                      {metadata.hasLimitedData && (
-                        <div className="flex items-start gap-1.5 text-xs text-blue-700">
-                          <Info className="h-3 w-3 shrink-0 mt-0.5" /> Limited session data — consider extending the date range.
-                        </div>
-                      )}
-                    </div>
-                  )}
-
                 </div>
-              </>
-            )}
-          </div>
+
+                {/* Warnings */}
+                {metadata && (metadata.dataWarnings.length > 0 || metadata.hasLimitedData) && (
+                  <div className="shrink-0 border-t pt-3 space-y-1.5">
+                    {metadata.dataWarnings.map((w, i) => (
+                      <div key={i} className="flex items-start gap-1.5 text-xs text-amber-700">
+                        <AlertTriangle className="h-3 w-3 shrink-0 mt-0.5" /> {w}
+                      </div>
+                    ))}
+                    {metadata.hasLimitedData && (
+                      <div className="flex items-start gap-1.5 text-xs text-blue-700">
+                        <Info className="h-3 w-3 shrink-0 mt-0.5" /> Limited session data — consider extending the date range.
+                      </div>
+                    )}
+                  </div>
+                )}
+
+              </div>
+            </>
+          )}
+        </div>
 
       </div>
     </div>
