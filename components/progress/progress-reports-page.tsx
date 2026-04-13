@@ -15,7 +15,6 @@ import {
   Sparkles,
   FileText,
   Users,
-  Plus,
   AlertTriangle,
   Info,
   Loader2,
@@ -381,23 +380,10 @@ export function ProgressReportsPage({ initialReports, students }: Props) {
         {/* ── COL 2: Past Reports (vertical) ── */}
         <Card className="flex flex-col min-h-0">
           <CardHeader className="pb-3 shrink-0">
-            <div className="flex items-center justify-between">
-              <CardTitle className="text-sm font-semibold flex items-center gap-2">
-                <History className="h-4 w-4" />
-                Past Reports
-              </CardTitle>
-              {selectedStudentId && (
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  onClick={resetEditor}
-                  className="h-7 gap-1.5 text-xs text-muted-foreground hover:text-foreground"
-                >
-                  <Plus className="h-3.5 w-3.5" />
-                  New
-                </Button>
-              )}
-            </div>
+            <CardTitle className="text-sm font-semibold flex items-center gap-2">
+              <History className="h-4 w-4" />
+              Past Reports
+            </CardTitle>
             {selectedStudent && (
               <p className="text-xs text-muted-foreground mt-1">
                 {selectedStudent.firstName} {selectedStudent.lastName}
