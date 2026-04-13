@@ -2,7 +2,7 @@
 
 import { useState, useMemo } from "react";
 import Link from "next/link";
-import { Search, ChevronRight, GripVertical } from "lucide-react";
+import { Search, ChevronRight } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { IEPStatusBadge } from "@/components/shared/status-badge";
 import { cn } from "@/lib/utils";
@@ -197,9 +197,8 @@ export function CaseloadSidePanel({
                       );
                       e.dataTransfer.effectAllowed = "copy";
                     }}
-                    className="group flex items-center gap-1 cursor-grab active:cursor-grabbing"
+                    className="group flex items-center cursor-grab active:cursor-grabbing"
                   >
-                    <GripVertical className="h-3.5 w-3.5 shrink-0 text-muted-foreground/20 group-hover:text-muted-foreground/50 transition-colors" />
                     <Link
                       href={`/students/${student.id}/overview`}
                       draggable={false}
