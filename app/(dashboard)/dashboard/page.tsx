@@ -88,9 +88,6 @@ export default async function DashboardPage() {
             </CardTitle>
           </CardHeader>
           <CardContent className="flex-1 min-h-0 overflow-hidden pt-0 flex flex-col">
-            <p className="text-xs text-muted-foreground mb-3 italic shrink-0">
-              Drag a name onto the calendar to schedule a session
-            </p>
             <CaseloadSidePanel
               draggable
               students={students.map(s => ({

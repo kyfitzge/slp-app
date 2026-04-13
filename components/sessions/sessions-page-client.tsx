@@ -269,7 +269,7 @@ export function SessionsPageClient({ sessions, students, needsNoteCount }: Props
       </div>
 
       {/* Two-column layout */}
-      <div className="grid grid-cols-1 lg:grid-cols-[300px_1fr] gap-4 flex-1 min-h-0">
+      <div className="grid grid-cols-1 lg:grid-cols-[320px_1fr] gap-4 flex-1 min-h-0">
 
         {/* ── LEFT: Caseload ── */}
         <Card className="flex flex-col min-h-0">
@@ -286,10 +286,6 @@ export function SessionsPageClient({ sessions, students, needsNoteCount }: Props
               onSelect={(id) => {
                 setSelectedStudentId((prev) => (prev === id ? null : id));
                 setStatusFilter("all");
-              }}
-              getStudentMeta={(id) => {
-                const count = sessionCountByStudent[id] ?? 0;
-                return count > 0 ? `${count} session${count !== 1 ? "s" : ""}` : null;
               }}
             />
           </CardContent>
