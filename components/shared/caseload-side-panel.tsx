@@ -197,13 +197,13 @@ export function CaseloadSidePanel({
                       );
                       e.dataTransfer.effectAllowed = "copy";
                     }}
-                    className="group flex items-center cursor-grab active:cursor-grabbing"
+                    className="group w-full flex items-center cursor-grab active:cursor-grabbing"
                   >
                     <Link
                       href={`/students/${student.id}/overview`}
                       draggable={false}
                       onClick={(e) => e.stopPropagation()}
-                      className="flex flex-1 items-center px-1 py-2.5 hover:bg-muted/40 rounded-md transition-colors min-w-0"
+                      className="flex flex-1 items-center px-2 py-2.5 hover:bg-muted/40 rounded-md transition-colors min-w-0"
                     >
                       {innerContent}
                     </Link>
