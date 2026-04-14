@@ -21,16 +21,26 @@ interface ChatGoal {
   cueing?: string | null;
 }
 
+/** Per-student context used in group sessions. */
+interface StudentChatContext {
+  studentId: string;
+  studentName: string;
+  goals: ChatGoal[];
+  currentNote: string;
+}
+
 interface ChatContext {
   sessionDate: string;
   sessionType: string;
   durationMins?: number | null;
   students: string[];
-  goals: ChatGoal[];
+  goals: ChatGoal[];          // flat list kept for single-student backward compat
   missingLabels: string[];
-  currentNote: string;
+  currentNote: string;        // active student's note (single-student) or combined (group)
   /** Raw voice transcript if the SLP already recorded a summary. */
   transcript?: string;
+  /** Per-student breakdown — present only for group sessions. */
+  studentContexts?: StudentChatContext[];
 }
 
 interface ChatMessage {
@@ -43,47 +53,60 @@ interface ChatBody {
   context: ChatContext;
 }
 
-function buildSystemPrompt(ctx: ChatContext): string {
-  // ── What is already known ──────────────────────────────────────────────────
-  const knownGoals = ctx.goals.filter(
-    (g) => g.accuracy != null || g.trials != null || g.cueing != null
-  );
-  const unknownGoals = ctx.goals.filter(
-    (g) => g.accuracy == null && g.trials == null && g.cueing == null
-  );
+function goalLine(g: ChatGoal): string {
+  const parts: string[] = [`• ${g.name}`];
+  if (g.accuracy != null) parts.push(`${g.accuracy}% accuracy`);
+  if (g.trials)           parts.push(`${g.trials} trials`);
+  if (g.cueing)           parts.push(g.cueing.replace(/_/g, " ").toLowerCase());
+  if (g.accuracy == null && !g.trials) parts.push("(no performance data yet)");
+  return parts.join(" — ");
+}
 
-  const goalLines = ctx.goals.length > 0
-    ? ctx.goals.map((g) => {
-        const parts: string[] = [`• ${g.name}`];
-        if (g.accuracy != null)  parts.push(`${g.accuracy}% accuracy`);
-        if (g.trials)            parts.push(`${g.trials} trials`);
-        if (g.cueing)            parts.push(g.cueing.replace(/_/g, " ").toLowerCase());
-        if (g.accuracy == null && !g.trials) parts.push("(no performance data yet)");
-        return parts.join(" — ");
-      }).join("\n")
-    : "None identified yet.";
+function buildSystemPrompt(ctx: ChatContext): string {
+  const isGroup = (ctx.studentContexts?.length ?? 0) > 1;
 
   const missingSection = ctx.missingLabels.length > 0
     ? `STILL MISSING: ${ctx.missingLabels.join(", ")}`
     : "All required structured fields have been captured.";
 
-  const noteSection = ctx.currentNote.trim()
-    ? `CURRENT NOTE DRAFT:\n"${ctx.currentNote.trim()}"`
-    : "No note draft yet.";
-
   const transcriptSection = ctx.transcript?.trim()
-    ? `VOICE TRANSCRIPT (what the SLP already said):\n"${ctx.transcript.trim()}"`
+    ? `═══ PRIOR VOICE TRANSCRIPT ═══\n"${ctx.transcript.trim()}"\n`
     : "";
 
-  const goalsNeedingData = unknownGoals.length > 0
-    ? `Goals with no performance data yet: ${unknownGoals.map((g) => g.name).join(", ")}`
-    : knownGoals.length > 0
-    ? `Performance data captured for: ${knownGoals.map((g) => g.name).join(", ")}`
+  // ── Per-student section (group sessions) ──────────────────────────────────
+  let studentSection = "";
+  if (isGroup && ctx.studentContexts) {
+    studentSection = ctx.studentContexts.map((sc) => {
+      const goalLines = sc.goals.length > 0
+        ? sc.goals.map(goalLine).join("\n")
+        : "  No goals on file.";
+      const notePreview = sc.currentNote.trim()
+        ? `  Current note: "${sc.currentNote.trim().slice(0, 300)}${sc.currentNote.trim().length > 300 ? "…" : ""}"`
+        : "  Current note: (none yet)";
+      return `--- ${sc.studentName} ---\nGoals:\n${goalLines}\n${notePreview}`;
+    }).join("\n\n");
+  }
+
+  // ── Single-student goal section (backward compat) ─────────────────────────
+  const knownGoals   = ctx.goals.filter(g => g.accuracy != null || g.trials != null || g.cueing != null);
+  const unknownGoals = ctx.goals.filter(g => g.accuracy == null && g.trials == null && g.cueing == null);
+  const singleGoalLines = ctx.goals.length > 0
+    ? ctx.goals.map(goalLine).join("\n")
+    : "None identified yet.";
+  const goalsNeedingData = !isGroup
+    ? unknownGoals.length > 0
+      ? `\nGoals with no performance data yet: ${unknownGoals.map(g => g.name).join(", ")}`
+      : knownGoals.length > 0
+      ? `\nPerformance data captured for: ${knownGoals.map(g => g.name).join(", ")}`
+      : ""
     : "";
 
-  // ── Determine conversation phase ──────────────────────────────────────────
-  const allCaptured = ctx.missingLabels.length === 0 && ctx.goals.length > 0 && knownGoals.length === ctx.goals.length;
+  const allCaptured = ctx.missingLabels.length === 0
+    && (isGroup
+      ? (ctx.studentContexts ?? []).every(sc => sc.goals.every(g => g.accuracy != null || g.trials != null))
+      : ctx.goals.length > 0 && knownGoals.length === ctx.goals.length);
 
+  // ── Compose prompt ─────────────────────────────────────────────────────────
   return `You are a clinical documentation assistant for a school-based Speech-Language Pathologist (SLP).
 Your sole purpose is to fill gaps in session documentation through a short, focused interview.
 You are NOT a general assistant or therapist. You are a fast, precise documentation tool.
@@ -92,51 +115,47 @@ You are NOT a general assistant or therapist. You are a fast, precise documentat
 Date: ${ctx.sessionDate}
 Type: ${ctx.sessionType}
 Duration: ${ctx.durationMins ? `${ctx.durationMins} min` : "not yet recorded"}
-Students: ${ctx.students.join(", ")}
+${isGroup ? `Students in this GROUP session: ${(ctx.studentContexts ?? []).map(sc => sc.studentName).join(", ")}` : `Student: ${ctx.students[0] ?? "Unknown"}`}
 
-═══ GOALS & PERFORMANCE DATA ═══
-${goalLines}
-${goalsNeedingData ? `\n${goalsNeedingData}` : ""}
+${isGroup
+  ? `═══ PER-STUDENT GOALS & NOTES ═══\n${studentSection}`
+  : `═══ GOALS & PERFORMANCE DATA ═══\n${singleGoalLines}${goalsNeedingData}`
+}
 
-${transcriptSection ? `═══ PRIOR VOICE TRANSCRIPT ═══\n${transcriptSection}\n` : ""}
-═══ CURRENT NOTE DRAFT ═══
-${noteSection}
-
+${transcriptSection}${!isGroup ? `═══ CURRENT NOTE DRAFT ═══\n${ctx.currentNote.trim() ? `"${ctx.currentNote.trim()}"` : "No note draft yet."}\n` : ""}
 ═══ DOCUMENTATION STATUS ═══
 ${missingSection}
 
 ═══ YOUR RULES ═══
-1. NEVER ask about information already present in the transcript, note draft, or session context above.
+1. NEVER ask about information already present in the transcript, note draft(s), or session context above.
 2. Ask EXACTLY ONE short, specific question per response. No lists of questions, no preambles.
-3. Use this priority order when choosing what to ask next:
-   — (1) Which goals/targets were addressed (if none captured yet) — when asking this, list all available IEP goals by name so the SLP can confirm or select (e.g. "Which of these goals did you address: [goal 1], [goal 2], [goal 3]?")
+${isGroup
+  ? `3. This is a GROUP session. Work through each student one at a time. Always name the student you are asking about (e.g. "For ${(ctx.studentContexts ?? [])[0]?.studentName ?? "Student 1"} — what accuracy did you observe on the [goal] goal?"). Complete all questions for one student before moving to the next.`
+  : `3. Use this priority order when choosing what to ask next:
+   — (1) Which goals/targets were addressed (if none captured yet)
    — (2) Student performance: accuracy % or trial counts (e.g. "8 out of 10")
    — (3) Cueing or support level used (independent, verbal cues, modeling, etc.)
    — (4) Activity or task the goal was practiced through
    — (5) Student participation, engagement, or response to prompts
-   — (6) Notable observations, behavioral notes, or plan for next session
-   — (7) ALWAYS, before closing: "Is there anything else you'd like included in the note?" — this step is required every time, no exceptions
-4. If an answer is rich, extract ALL fields you can from it — only follow up on things you genuinely cannot infer.
-5. When you have concrete new details to add, output a factual summary of ALL information gathered so far on a new line starting with EXACTLY:
+   — (6) Notable observations, behavioral notes, or plan for next session`}
+4. Priority order for each student in a group: (1) goals addressed, (2) accuracy/trials, (3) cueing level, (4) activity, (5) participation, (6) observations.
+5. If an answer is rich, extract ALL fields you can from it — only follow up on things you genuinely cannot infer.
+6. When you have concrete new details to add, output a factual summary starting with EXACTLY:
    NOTE_UPDATE:
-   (followed immediately by a plain factual recap — no clinical formatting, no markdown, no labels)
+   (followed immediately by a plain factual recap — no clinical formatting, no markdown headers)
    Do NOT output NOTE_UPDATE if nothing new was learned in this turn.
-
-   This summary will be processed by a separate clinical note generator that has full session context.
-   Write the summary as a compact, information-dense recap of everything known so far:
-   — Goals or targets addressed
-   — Performance: exact numbers if stated (accuracy %, trials correct/total), otherwise qualitative description
-   — Cueing or support level used
-   — Activities or tasks
-   — Participation and engagement
-   — Any next steps or observations mentioned
-   Include all specific details. Write plainly — do NOT attempt to write the final clinical note.
-6. ${allCaptured
-    ? "All required fields are captured. You MUST now ask the open-context question (priority 7): give the SLP an explicit invitation to add anything else before you close — e.g. 'Is there anything else you'd like included in the note?' If they have more to add, capture it and output a NOTE_UPDATE. If they say no or indicate they're done, close the conversation."
-    : "Keep asking until all required fields are captured (priorities 1–6), then ALWAYS ask the open-context question (priority 7) before closing. Never skip it."}
-7. Tone: direct, clinical, collegial. One sentence per question. No small talk. No apologies. No over-explaining.
-8. Example of a good question: "What accuracy did you observe on the /r/ articulation goal?"
-   Example of a bad question: "That's great! Now, could you tell me a little bit about how the student performed today in terms of their accuracy on the goals?"`;
+${isGroup
+  ? `   For group sessions, structure the NOTE_UPDATE with each student on their own clearly labelled section:
+   [${(ctx.studentContexts ?? []).map(sc => sc.studentName).join("] ... [")}]
+   Example format:
+   [${(ctx.studentContexts ?? [])[0]?.studentName ?? "Student 1"}]: Addressed /r/ articulation goal. 8/10 trials, indirect verbal cues. Engaged well.
+   [${(ctx.studentContexts ?? [])[1]?.studentName ?? "Student 2"}]: Addressed language comprehension goal. 70% accuracy with modeling. Needed frequent redirection.`
+  : `   Write as a compact, information-dense recap covering: goals addressed, performance data, cueing level, activities, participation, next steps.`}
+7. ALWAYS, before closing the interview: ask "Is there anything else you'd like included in the note?" — no exceptions.
+8. ${allCaptured
+    ? "All required fields are captured. Ask the open-context question (rule 7) now. If they say no, close the conversation."
+    : "Keep asking until all fields are captured, then ask the open-context question (rule 7) before closing."}
+9. Tone: direct, clinical, collegial. One sentence per question. No small talk. No apologies. No over-explaining.`;
 }
 
 export async function POST(

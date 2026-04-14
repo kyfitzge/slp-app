@@ -714,6 +714,13 @@ interface AiChatGoal {
   cueing?: string | null;
 }
 
+interface AiChatStudentContext {
+  studentId: string;
+  studentName: string;
+  goals: AiChatGoal[];
+  currentNote: string;
+}
+
 interface AiChatContext {
   sessionDate: string;
   sessionType: string;
@@ -723,6 +730,8 @@ interface AiChatContext {
   missingLabels: string[];
   currentNote: string;
   transcript?: string;
+  /** Per-student breakdown — present for group sessions. */
+  studentContexts?: AiChatStudentContext[];
 }
 
 type AiVoiceState =
@@ -2480,6 +2489,26 @@ export function SessionNotePage({
                       missingLabels,
                       currentNote: noteDraft,
                       transcript: summaryContext || undefined,
+                      ...(isGroup && {
+                        studentContexts: students.map((s) => ({
+                          studentId: s.id,
+                          studentName: `${s.firstName} ${s.lastName}`,
+                          goals: matchedGoals
+                            .filter((mg) => s.goals.some((g) => g.id === mg.goal.id))
+                            .map((mg) => {
+                              const aiExt  = aiExtractions[mg.goal.id];
+                              const ovride = goalOverrides[mg.goal.id];
+                              return {
+                                id: mg.goal.id,
+                                name: mg.goal.shortName ?? mg.goal.goalText.slice(0, 50),
+                                accuracy: goalEffectiveAccuracy(mg, aiExt, ovride),
+                                trials: goalEffectiveTrials(mg, aiExt, ovride),
+                                cueing: goalEffectiveCueing(mg, aiExt, ovride),
+                              };
+                            }),
+                          currentNote: studentNoteDrafts[s.id] ?? "",
+                        })),
+                      }),
                     }}
                     onClose={() => setShowAiChat(false)}
                     onApplyNote={(summary) => generateNote(summary)}
@@ -2519,6 +2548,26 @@ export function SessionNotePage({
                       missingLabels,
                       currentNote: noteDraft,
                       transcript: summaryContext || undefined,
+                      ...(isGroup && {
+                        studentContexts: students.map((s) => ({
+                          studentId: s.id,
+                          studentName: `${s.firstName} ${s.lastName}`,
+                          goals: matchedGoals
+                            .filter((mg) => s.goals.some((g) => g.id === mg.goal.id))
+                            .map((mg) => {
+                              const aiExt  = aiExtractions[mg.goal.id];
+                              const ovride = goalOverrides[mg.goal.id];
+                              return {
+                                id: mg.goal.id,
+                                name: mg.goal.shortName ?? mg.goal.goalText.slice(0, 50),
+                                accuracy: goalEffectiveAccuracy(mg, aiExt, ovride),
+                                trials: goalEffectiveTrials(mg, aiExt, ovride),
+                                cueing: goalEffectiveCueing(mg, aiExt, ovride),
+                              };
+                            }),
+                          currentNote: studentNoteDrafts[s.id] ?? "",
+                        })),
+                      }),
                     }}
                     onClose={() => setShowTextChat(false)}
                     onApplyNote={(summary) => augmentNote(summary)}
