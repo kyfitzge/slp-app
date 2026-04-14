@@ -9,6 +9,7 @@ import {
   Settings,
   LogOut,
   Activity,
+  BookOpen,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { createClient } from "@/lib/supabase/client";
@@ -19,6 +20,7 @@ const navItems = [
   { href: "/dashboard",        label: "Dashboard",        icon: LayoutDashboard },
   { href: "/sessions",         label: "Session Notes",    icon: ClipboardList   },
   { href: "/progress-reports", label: "Progress Reports", icon: FileText        },
+  { href: "/lesson-planning",  label: "Lesson Planning",  icon: BookOpen        },
 ];
 
 interface SidebarProps {

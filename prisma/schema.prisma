@@ -128,6 +128,7 @@ model User {
   sessions          Session[]
   scheduleEntries   ScheduleEntry[]
   progressSummaries ProgressSummary[]
+  lessonPlans       LessonPlan[]
   voiceNotes        VoiceNote[]
 
   @@map("users")
@@ -170,6 +171,7 @@ model Student {
   goals             Goal[]
   sessionStudents   SessionStudent[]
   progressSummaries ProgressSummary[]
+  lessonPlans       LessonPlan[]
 
   @@index([lastName, firstName])
   @@index([schoolName])
@@ -470,4 +472,29 @@ model ProgressSummary {
   @@index([studentId])
   @@index([userId])
   @@map("progress_summaries")
+}
+
+// ─────────────────────────────────────────────
+// LESSON PLAN
+// ─────────────────────────────────────────────
+
+model LessonPlan {
+  id           String   @id @default(cuid())
+  userId       String
+  studentId    String
+  sessionDate  String   // yyyy-MM-dd
+  sessionType  String   @default("INDIVIDUAL")
+  durationMins Int?
+  slpNotes     String?  // SLP's focus/preferences input
+  planText     String   // Full AI-generated plan (markdown sections)
+  isDraft      Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  student Student @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  @@index([studentId])
+  @@index([userId])
+  @@map("lesson_plans")
 }
