@@ -847,53 +847,52 @@ export function LessonPlanningPage({ students }: Props) {
                   )}
                 </div>
 
-                {/* ── Plan content ── */}
-                {hasPlan && (
-                  <>
-                    {/* Goal chips reference */}
-                    {(selectedStudent.goals.filter(g => g.status === "ACTIVE").length > 0 ||
-                      additionalStudents.some(s => s.goals.filter(g => g.status === "ACTIVE").length > 0)) && (
-                      <div className="shrink-0 pt-1 border-t">
-                        {isGroup ? (
-                          <div className="space-y-2 pt-3">
-                            {[selectedStudent, ...additionalStudents].map((student) => {
-                              const activeGoals = student.goals.filter(g => g.status === "ACTIVE");
-                              if (activeGoals.length === 0) return null;
-                              return (
-                                <div key={student.id} className="flex items-center gap-2 overflow-x-auto pb-0.5">
-                                  <span className="text-xs font-semibold text-muted-foreground shrink-0 w-16 truncate">{student.firstName}:</span>
-                                  {activeGoals.map(goal => <GoalChip key={goal.id} goal={goal} />)}
-                                </div>
-                              );
-                            })}
-                          </div>
-                        ) : (
-                          <div className="flex items-center gap-2 overflow-x-auto pb-1 pt-3">
-                            <span className="text-xs text-muted-foreground font-medium shrink-0">Active goals:</span>
-                            {selectedStudent.goals
-                              .filter(g => g.status === "ACTIVE")
-                              .map(goal => <GoalChip key={goal.id} goal={goal} />)
-                            }
-                          </div>
-                        )}
+                {/* ── Active goals — always visible ── */}
+                {(selectedStudent.goals.filter(g => g.status === "ACTIVE").length > 0 ||
+                  additionalStudents.some(s => s.goals.filter(g => g.status === "ACTIVE").length > 0)) && (
+                  <div className="shrink-0 border-t pt-4">
+                    <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">Active Goals</p>
+                    {isGroup ? (
+                      <div className="space-y-2">
+                        {[selectedStudent, ...additionalStudents].map((student) => {
+                          const activeGoals = student.goals.filter(g => g.status === "ACTIVE");
+                          if (activeGoals.length === 0) return null;
+                          return (
+                            <div key={student.id} className="flex items-start gap-2">
+                              <span className="text-xs font-semibold text-muted-foreground shrink-0 w-16 truncate pt-2">{student.firstName}:</span>
+                              <div className="flex items-center gap-2 overflow-x-auto pb-0.5 flex-1">
+                                {activeGoals.map(goal => <GoalChip key={goal.id} goal={goal} />)}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    ) : (
+                      <div className="flex items-center gap-2 overflow-x-auto pb-1">
+                        {selectedStudent.goals
+                          .filter(g => g.status === "ACTIVE")
+                          .map(goal => <GoalChip key={goal.id} goal={goal} />)
+                        }
                       </div>
                     )}
+                  </div>
+                )}
 
-                    {/* Plan sections */}
-                    <div className="space-y-3 pb-4">
-                      {sections.length > 0 ? (
-                        sections.map((section, idx) => (
-                          <PlanSectionCard key={idx} section={section} />
-                        ))
-                      ) : (
-                        <div className="rounded-lg border bg-muted/30 p-4">
-                          <pre className="text-sm text-foreground/80 whitespace-pre-wrap font-sans leading-relaxed">
-                            {planText}
-                          </pre>
-                        </div>
-                      )}
-                    </div>
-                  </>
+                {/* ── Plan content ── */}
+                {hasPlan && (
+                  <div className="space-y-3 pb-4 border-t pt-4">
+                    {sections.length > 0 ? (
+                      sections.map((section, idx) => (
+                        <PlanSectionCard key={idx} section={section} />
+                      ))
+                    ) : (
+                      <div className="rounded-lg border bg-muted/30 p-4">
+                        <pre className="text-sm text-foreground/80 whitespace-pre-wrap font-sans leading-relaxed">
+                          {planText}
+                        </pre>
+                      </div>
+                    )}
+                  </div>
                 )}
 
               </div>
