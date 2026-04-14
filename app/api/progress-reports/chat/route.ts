@@ -179,8 +179,29 @@ You can help the SLP with any of:
 — Write in the SLP's voice, addressed to the reader (parent/administrator/IEP team)
 — Third person: use "${firstName}" or "the student"
 — Past tense, professional, parent-readable prose
-— No headers, bullets, or markdown in report text — flowing paragraphs only
+— No headers, bullets, or markdown structure in report text — flowing paragraphs only
 — Base all claims on the data provided — never fabricate numbers or observations
+
+═══ SOURCE ATTRIBUTION MARKERS (required in all REPORT_UPDATE drafts) ═══
+
+Every substantive phrase in report text must carry exactly one marker. Use square-bracket tags only — never curly braces.
+
+[IEP]...[/IEP] — content whose sole source is the IEP record: goal names, target accuracy percentages, goal domains, baseline scores, IEP status, service dates, present levels text.
+Example: [IEP]${firstName}'s articulation goal targets 80% accuracy[/IEP]
+
+[NOTE]...[/NOTE]** — content traceable to session notes or recorded data points. Be generous — if a fact came from the session data, tag it. Includes: observed accuracy percentages, trial counts, cueing levels, activities, behavioral observations, date-specific performance, rephrased note content.
+Example: [NOTE]${firstName} produced the target correctly on 6 of 10 trials with direct verbal cues[/NOTE]
+Also: if a note says "needed lots of help" and you write "required significant cueing support," that still goes in [NOTE].
+When in doubt between [NOTE] and **: factual descriptions of what happened in sessions → [NOTE]. Interpretation layered on top → **.
+
+**...** — content YOU inferred, synthesized, or concluded that was not explicitly stated in the IEP or notes.
+ALWAYS mark with **: trend interpretations ("accuracy appears to be improving"), progress conclusions ("suggests the skill has not yet generalized"), recommendations and next steps, clinical elaborations beyond what the notes literally say, any sentence you constructed to connect or summarize data, anything described as "suggests," "indicates," or "appears."
+NEVER mark with **: specific numbers from data (use [NOTE]), goal names/targets from IEP (use [IEP]), activities named in notes (use [NOTE]).
+
+Span size: mark the smallest meaningful phrase — not entire sentences. One sentence may contain [NOTE], [IEP], and ** spans side by side.
+
+Syntax: ONLY [IEP][/IEP], [NOTE][/NOTE], and **double asterisks**. Never { }, [[ ]], or {{ }}. Never nest markers.
+Transitional words with no clinical meaning ("During this period,") may be left untagged.
 
 ═══ OUTPUT PROTOCOLS ═══
 
@@ -192,12 +213,12 @@ then a single JSON object, e.g.: {"title":"Q1 2026","startDate":"2026-01-01","en
 REPORT_UPDATE — when you produce a full or substantially revised draft:
 Output a line starting with EXACTLY:
 REPORT_UPDATE:
-then the full clean report text (no markers, no JSON, no commentary).
+then the full report text WITH source attribution markers applied as described above.
 
 Rules:
 — Always output a conversational reply as well — never output only a protocol block
-— Keep conversational replies short: 1–3 sentences, no markdown bold/italic, no bullet points
-— Never use ** or __ formatting in conversational replies — plain text only`;
+— Keep conversational replies short: 1–3 sentences, plain text only
+— Never use ** or __ formatting in conversational replies — the ** marker is for report text only`;
 }
 
 export async function POST(req: NextRequest) {
