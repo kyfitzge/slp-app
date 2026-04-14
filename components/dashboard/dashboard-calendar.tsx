@@ -116,6 +116,12 @@ function minsFromStart(timeStr: string): number {
   return Math.max(0, (parts[0] - GRID_START) * 60 + (parts[1] ?? 0));
 }
 
+/** Convert "HH:MM" to total minutes since midnight. */
+function timeToMins(timeStr: string): number {
+  const parts = timeStr.split(":").map(Number);
+  return (parts[0] ?? 0) * 60 + (parts[1] ?? 0);
+}
+
 function slotToTime(idx: number): string {
   const total = GRID_START * 60 + idx * 30;
   const h = Math.floor(total / 60);
@@ -382,13 +388,14 @@ function useCurrentTimePx(): number | null {
 }
 
 function TimeGridView({
-  days, sessions, dragOverSlot, onDragOver, onDragLeave, onDrop, onDelete,
+  days, sessions, dragOverSlot, draggingDurationMins, onDragOver, onDragLeave, onDrop, onDelete,
   draggingId, onSessionDragStart, onDragEnd,
   resizePreview, onResizeStart,
 }: {
   days: Date[];
   sessions: CalendarSession[];
   dragOverSlot: string | null;
+  draggingDurationMins: number;
   onDragOver: (e: React.DragEvent, key: string) => void;
   onDragLeave: () => void;
   onDrop: (e: React.DragEvent, date: Date, time: string) => void;
@@ -477,30 +484,44 @@ function TimeGridView({
                 }}
               >
                 {/* Horizontal grid lines + slot highlight at 15-min resolution.
-                    pointer-events-none so they never intercept drag events. */}
-                {slots15.map(i => {
-                  // Build the time string for this 15-min slot
-                  const totalMins = GRID_START * 60 + i * 15;
-                  const hh = Math.floor(totalMins / 60);
-                  const mm = totalMins % 60;
-                  const slotTime = `${String(hh).padStart(2,"0")}:${String(mm).padStart(2,"0")}`;
-                  const slotKey  = `${dayKey}_${slotTime}`;
-                  const isHour   = i % 4 === 0;
-                  const isHalf   = i % 2 === 0;
-                  const showLine = isHour || isHalf; // only draw lines at 30-min boundaries
-                  return (
-                    <div
-                      key={i}
-                      className={cn(
-                        "absolute left-0 right-0 pointer-events-none transition-colors",
-                        showLine && "border-t",
-                        isHour ? "border-border/60" : "border-border/35",
-                        dragOverSlot === slotKey && "bg-primary/15",
-                      )}
-                      style={{ top: i * SLOT_PX_15, height: SLOT_PX_15 }}
-                    />
-                  );
-                })}
+                    pointer-events-none so they never intercept drag events.
+                    Highlight spans the full duration of the session being dragged. */}
+                {(() => {
+                  // Parse the drag-over start time once for the whole column
+                  let dragStartMins: number | null = null;
+                  if (dragOverSlot) {
+                    const parts = dragOverSlot.split("_");
+                    const timeStr = parts[parts.length - 1];
+                    const dragDay = parts.slice(0, parts.length - 1).join("_");
+                    if (dragDay === dayKey && timeStr) {
+                      dragStartMins = timeToMins(timeStr);
+                    }
+                  }
+                  return slots15.map(i => {
+                    const totalMins = GRID_START * 60 + i * 15;
+                    const hh = Math.floor(totalMins / 60);
+                    const mm = totalMins % 60;
+                    const slotMins = hh * 60 + mm;
+                    const isHour   = i % 4 === 0;
+                    const isHalf   = i % 2 === 0;
+                    const showLine = isHour || isHalf;
+                    const inRange  = dragStartMins !== null
+                      && slotMins >= dragStartMins
+                      && slotMins < dragStartMins + draggingDurationMins;
+                    return (
+                      <div
+                        key={i}
+                        className={cn(
+                          "absolute left-0 right-0 pointer-events-none transition-colors",
+                          showLine && "border-t",
+                          isHour ? "border-border/60" : "border-border/35",
+                          inRange && "bg-primary/15",
+                        )}
+                        style={{ top: i * SLOT_PX_15, height: SLOT_PX_15 }}
+                      />
+                    );
+                  });
+                })()}
 
                 {/* Current-time indicator — only on today's column */}
                 {isToday(day) && nowPx !== null && (
@@ -672,6 +693,10 @@ export function DashboardCalendar({ initialSessions, students = [] }: DashboardC
 
   // Session-move drag state
   const [draggingSessionId, setDraggingSessionId] = useState<string | null>(null);
+  // Duration of the session being dragged — used to size the drop shadow
+  const draggingDurationMins = draggingSessionId
+    ? (sessions.find(s => s.id === draggingSessionId)?.durationMins ?? 30)
+    : 30;
 
   // Resize state (mouse-based, not HTML5 drag)
   const resizingRef = useRef<{
@@ -1085,6 +1110,7 @@ export function DashboardCalendar({ initialSessions, students = [] }: DashboardC
             days={viewDays}
             sessions={sessions}
             dragOverSlot={dragOverSlot}
+            draggingDurationMins={draggingDurationMins}
             onDragOver={handleDragOver}
             onDragLeave={handleDragLeave}
             onDrop={handleDrop}
