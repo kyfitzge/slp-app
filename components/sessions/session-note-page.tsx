@@ -742,6 +742,7 @@ function AiChatPanel({
   onApplyNote: (note: string) => void;
 }) {
   const [messages, setMessages] = useState<AiChatMessage[]>([]);
+  const messagesRef = useRef<AiChatMessage[]>([]); // always-current mirror for async closures
   const [voiceState, setVoiceState] = useState<AiVoiceState>("ai_thinking");
   const [pendingNoteUpdate, setPendingNoteUpdate] = useState<string | null>(null);
   const [statusMsg, setStatusMsg] = useState<string | null>(null);
@@ -1000,6 +1001,12 @@ function AiChatPanel({
     }
   }
 
+  // Keep ref and state in sync — use this everywhere instead of setMessages directly
+  function setMsgs(next: AiChatMessage[]) {
+    messagesRef.current = next;
+    setMessages(next);
+  }
+
   // ── Send message to Claude ───────────────────────────────────────────────────
   async function sendToAI(history: AiChatMessage[], speakResponse: boolean) {
     setVoiceState("ai_thinking");
@@ -1013,7 +1020,7 @@ function AiChatPanel({
       if (!res.ok) throw new Error(json.error ?? "AI error");
 
       const aiMsg: AiChatMessage = { role: "assistant", content: json.reply };
-      setMessages((prev) => [...prev, aiMsg]);
+      setMsgs([...messagesRef.current, aiMsg]);
 
       if (json.noteUpdate) setPendingNoteUpdate(json.noteUpdate);
 
@@ -1025,8 +1032,8 @@ function AiChatPanel({
         setVoiceState("idle");
       }
     } catch {
-      setMessages((prev) => [
-        ...prev,
+      setMsgs([
+        ...messagesRef.current,
         { role: "assistant", content: "Sorry, I had trouble connecting. Please try again." },
       ]);
       setVoiceState("idle");
@@ -1037,8 +1044,8 @@ function AiChatPanel({
     const trimmed = text.trim();
     if (!trimmed) return;
     const userMsg: AiChatMessage = { role: "user", content: trimmed };
-    const newHistory = [...messages, userMsg];
-    setMessages(newHistory);
+    const newHistory = [...messagesRef.current, userMsg];
+    setMsgs(newHistory);
     setPendingNoteUpdate(null);
     setStatusMsg(null);
     sendToAI(newHistory, speakResponse);
@@ -1048,8 +1055,8 @@ function AiChatPanel({
     if (!pendingNoteUpdate) return;
     onApplyNote(pendingNoteUpdate);
     setPendingNoteUpdate(null);
-    setMessages((prev) => [
-      ...prev,
+    setMsgs([
+      ...messagesRef.current,
       { role: "assistant", content: "Note updated. Is there anything else to add?" },
     ]);
   }
