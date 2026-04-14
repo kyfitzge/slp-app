@@ -211,14 +211,17 @@ FIELD_UPDATE:
 then a single JSON object, e.g.: {"title":"Q1 2026","startDate":"2026-01-01","endDate":"2026-03-31"}
 
 REPORT_UPDATE — when you produce a full or substantially revised draft:
-Output a line starting with EXACTLY:
+First write your short conversational reply (1–3 sentences), then on a new line output EXACTLY:
 REPORT_UPDATE:
 then the full report text WITH source attribution markers applied as described above.
+Do NOT add any text, separator lines, or sign-off after the report text — the report must end cleanly with the final sentence.
 
 Rules:
 — Always output a conversational reply as well — never output only a protocol block
+— The conversational reply MUST come BEFORE the REPORT_UPDATE line, never after
 — Keep conversational replies short: 1–3 sentences, plain text only
-— Never use ** or __ formatting in conversational replies — the ** marker is for report text only`;
+— Never use ** or __ formatting in conversational replies — the ** marker is for report text only
+— Never append "---", dashes, or any closing words after the report text`;
 }
 
 export async function POST(req: NextRequest) {
@@ -299,8 +302,15 @@ export async function POST(req: NextRequest) {
 
     if (reportIdx !== -1) {
       reportUpdate = textAfterField.slice(reportIdx + reportMarker.length).trim();
+
+      // Strip any trailing separator + conversational sign-off the model appended after the report.
+      // Match "---" or "–––" on its own line (with optional surrounding whitespace) and drop everything from there on.
+      reportUpdate = reportUpdate.replace(/\n\s*[-–—]{2,}\s*\n[\s\S]*$/, "").trim();
+      // Also strip a trailing line that is only dashes (no text before any newline content follows)
+      reportUpdate = reportUpdate.replace(/\n\s*[-–—]{2,}\s*$/, "").trim();
+
       reply = textAfterField.slice(0, reportIdx).trim();
-      if (!reply) reply = "Here's a draft based on what you've shared:";
+      if (!reply) reply = "Here's a draft based on what you've shared.";
     }
 
     return NextResponse.json({ reply, reportUpdate, fieldUpdate });
