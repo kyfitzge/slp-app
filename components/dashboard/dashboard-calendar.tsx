@@ -12,7 +12,7 @@ import {
   isSameDay, isSameMonth, isToday,
   eachDayOfInterval,
 } from "date-fns";
-import { ChevronLeft, ChevronRight, Loader2, Plus, Pencil, Trash2, ExternalLink } from "lucide-react";
+import { ChevronLeft, ChevronRight, Loader2, Plus, Pencil, Trash2, ExternalLink, UserPlus, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -635,11 +635,18 @@ function TimeGridView({
 
 // ─── Main Component ───────────────────────────────────────────────────────────
 
-interface DashboardCalendarProps {
-  initialSessions: CalendarSession[];
+interface CalendarStudent {
+  id: string;
+  firstName: string;
+  lastName: string;
 }
 
-export function DashboardCalendar({ initialSessions }: DashboardCalendarProps) {
+interface DashboardCalendarProps {
+  initialSessions: CalendarSession[];
+  students?: CalendarStudent[];
+}
+
+export function DashboardCalendar({ initialSessions, students = [] }: DashboardCalendarProps) {
   const router = useRouter();
 
   const [view, setView]               = useState<ViewMode>("week");
@@ -655,6 +662,9 @@ export function DashboardCalendar({ initialSessions }: DashboardCalendarProps) {
   const [draftTime, setDraftTime]       = useState("");
   const [draftLocation, setDraftLocation] = useState("");
   const [creating, setCreating]         = useState(false);
+  // Second student in dialog
+  const [draftStudentId2, setDraftStudentId2] = useState<string | null>(null);
+  const [showDraftPicker2, setShowDraftPicker2] = useState(false);
 
   // Delete confirmation dialog state
   const [deleteId, setDeleteId]   = useState<string | null>(null);
@@ -928,6 +938,9 @@ export function DashboardCalendar({ initialSessions }: DashboardCalendarProps) {
     if (!draft) return;
     setCreating(true);
     try {
+      const studentIds = [draft.studentId];
+      if (draftStudentId2) studentIds.push(draftStudentId2);
+
       const res = await fetch("/api/sessions", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -937,22 +950,31 @@ export function DashboardCalendar({ initialSessions }: DashboardCalendarProps) {
           startTime:    draftTime || undefined,
           durationMins: parseInt(draftDuration) || 30,
           location:     draftLocation || undefined,
-          studentIds:   [draft.studentId],
+          studentIds,
         }),
       });
       if (!res.ok) throw new Error();
       const { session } = await res.json();
       toast.success("Session scheduled");
-      setDraft(null);
-      // Optimistic update so the event appears immediately.
-      // Use toLocalDate so the event lands on the correct calendar cell.
+
+      // Build optimistic session students list
       const firstName = draft.studentName.split(" ")[0];
       const lastName  = draft.studentName.split(" ").slice(1).join(" ");
+      const optStudents: { student: { id: string; firstName: string; lastName: string } }[] = [
+        { student: { id: draft.studentId, firstName, lastName } },
+      ];
+      if (draftStudentId2) {
+        const s2 = students.find(s => s.id === draftStudentId2);
+        if (s2) optStudents.push({ student: s2 });
+      }
+
+      setDraft(null);
+      setDraftStudentId2(null);
       setSessions(prev => [...prev, {
         ...session,
         sessionDate: toLocalDate(session.sessionDate ?? draft.date),
         hasNotes: false,
-        sessionStudents: [{ student: { id: draft.studentId, firstName, lastName } }],
+        sessionStudents: optStudents,
       }]);
       router.refresh();
     } catch {
@@ -1077,7 +1099,7 @@ export function DashboardCalendar({ initialSessions }: DashboardCalendarProps) {
       </div>
 
       {/* ── Create-session dialog ── */}
-      <Dialog open={!!draft} onOpenChange={open => { if (!open) setDraft(null); }}>
+      <Dialog open={!!draft} onOpenChange={open => { if (!open) { setDraft(null); setDraftStudentId2(null); setShowDraftPicker2(false); } }}>
         <DialogContent className="sm:max-w-[400px]">
           <DialogHeader>
             <DialogTitle>Schedule Session</DialogTitle>
@@ -1087,9 +1109,55 @@ export function DashboardCalendar({ initialSessions }: DashboardCalendarProps) {
             <div className="space-y-4 py-1">
               {/* Summary chip */}
               <div className="rounded-lg bg-muted/50 px-4 py-3 text-sm space-y-1.5">
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground text-xs">Student</span>
-                  <span className="font-medium text-sm">{draft.studentName}</span>
+                <div className="flex justify-between items-start">
+                  <span className="text-muted-foreground text-xs">Student(s)</span>
+                  <div className="flex flex-col items-end gap-1">
+                    <span className="font-medium text-sm">{draft.studentName}</span>
+                    {draftStudentId2 && (() => {
+                      const s2 = students.find(s => s.id === draftStudentId2);
+                      return s2 ? (
+                        <div className="flex items-center gap-1">
+                          <span className="font-medium text-sm">{s2.firstName} {s2.lastName}</span>
+                          <button
+                            onClick={() => setDraftStudentId2(null)}
+                            className="rounded-full p-0.5 hover:bg-muted text-muted-foreground hover:text-foreground"
+                          >
+                            <X className="h-3 w-3" />
+                          </button>
+                        </div>
+                      ) : null;
+                    })()}
+                    {/* Add second student picker */}
+                    {!draftStudentId2 && students.filter(s => s.id !== draft.studentId).length > 0 && (
+                      <div className="relative">
+                        <button
+                          onClick={() => setShowDraftPicker2(p => !p)}
+                          className="flex items-center gap-1 text-xs text-primary hover:underline"
+                        >
+                          <UserPlus className="h-3 w-3" />
+                          Add student
+                        </button>
+                        {showDraftPicker2 && (
+                          <div className="absolute right-0 top-full mt-1 w-52 bg-card border rounded-lg shadow-lg z-50 overflow-hidden">
+                            <div className="text-xs font-medium text-muted-foreground px-3 py-2 border-b bg-muted/30">
+                              Add second student
+                            </div>
+                            <div className="max-h-48 overflow-y-auto">
+                              {students.filter(s => s.id !== draft.studentId).map(s => (
+                                <button
+                                  key={s.id}
+                                  onClick={() => { setDraftStudentId2(s.id); setShowDraftPicker2(false); }}
+                                  className="w-full text-left px-3 py-2 text-sm hover:bg-muted/50 transition-colors border-b last:border-0"
+                                >
+                                  {s.firstName} {s.lastName}
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-muted-foreground text-xs">Date</span>

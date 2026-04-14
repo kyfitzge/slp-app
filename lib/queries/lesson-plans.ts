@@ -5,6 +5,8 @@ export async function getLessonPlansByStudent(studentId: string, userId: string)
     where: { studentId, userId },
     select: {
       id: true,
+      studentId: true,
+      studentId2: true,
       sessionDate: true,
       sessionType: true,
       durationMins: true,
@@ -13,6 +15,7 @@ export async function getLessonPlansByStudent(studentId: string, userId: string)
       isDraft: true,
       createdAt: true,
       updatedAt: true,
+      student2: { select: { id: true, firstName: true, lastName: true } },
     },
     orderBy: { createdAt: "desc" },
   });
@@ -21,12 +24,16 @@ export async function getLessonPlansByStudent(studentId: string, userId: string)
 export async function getLessonPlanById(planId: string, userId: string) {
   return prisma.lessonPlan.findFirst({
     where: { id: planId, userId },
+    include: {
+      student2: { select: { id: true, firstName: true, lastName: true } },
+    },
   });
 }
 
 export async function createLessonPlan(data: {
   userId: string;
   studentId: string;
+  studentId2?: string | null;
   sessionDate: string;
   sessionType: string;
   durationMins?: number | null;
@@ -40,7 +47,15 @@ export async function createLessonPlan(data: {
 export async function updateLessonPlan(
   planId: string,
   userId: string,
-  data: { planText?: string; sessionDate?: string; sessionType?: string; durationMins?: number | null; slpNotes?: string | null; isDraft?: boolean }
+  data: {
+    planText?: string;
+    sessionDate?: string;
+    sessionType?: string;
+    durationMins?: number | null;
+    slpNotes?: string | null;
+    studentId2?: string | null;
+    isDraft?: boolean;
+  }
 ) {
   return prisma.lessonPlan.updateMany({
     where: { id: planId, userId },
@@ -53,9 +68,9 @@ export async function deleteLessonPlan(planId: string, userId: string) {
 }
 
 /** Fetch the clinical data needed to generate a lesson plan for one student. */
-export async function getDataForLessonPlan(userId: string, studentId: string) {
+async function fetchStudentPlanData(userId: string, studentId: string) {
   const cutoff = new Date();
-  cutoff.setDate(cutoff.getDate() - 90); // last 90 days of data
+  cutoff.setDate(cutoff.getDate() - 90);
 
   const [student, sessions] = await Promise.all([
     prisma.student.findFirst({
@@ -110,7 +125,6 @@ export async function getDataForLessonPlan(userId: string, studentId: string) {
       },
     }),
 
-    // Last 6 sessions with notes + data points
     prisma.session.findMany({
       where: {
         userId,
@@ -143,5 +157,22 @@ export async function getDataForLessonPlan(userId: string, studentId: string) {
     }),
   ]);
 
-  return { student, sessions: sessions.reverse() }; // oldest first
+  return { student, sessions: sessions.reverse() };
+}
+
+/** Fetch clinical data for one or two students. */
+export async function getDataForLessonPlan(
+  userId: string,
+  studentId: string,
+  studentId2?: string | null
+) {
+  if (studentId2) {
+    const [primary, secondary] = await Promise.all([
+      fetchStudentPlanData(userId, studentId),
+      fetchStudentPlanData(userId, studentId2),
+    ]);
+    return { student: primary.student, sessions: primary.sessions, student2: secondary.student, sessions2: secondary.sessions };
+  }
+  const { student, sessions } = await fetchStudentPlanData(userId, studentId);
+  return { student, sessions, student2: null, sessions2: [] };
 }

@@ -20,7 +20,7 @@ export async function POST(req: NextRequest) {
   try {
     const user = await requireUser();
     const body = await req.json();
-    const { studentId, sessionDate, sessionType, durationMins, slpNotes, planText } = body;
+    const { studentId, studentId2, sessionDate, sessionType, durationMins, slpNotes, planText } = body;
 
     if (!studentId || !sessionDate || !sessionType || !planText) {
       return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
@@ -29,6 +29,7 @@ export async function POST(req: NextRequest) {
     const plan = await createLessonPlan({
       userId: user.id,
       studentId,
+      studentId2: studentId2 ?? null,
       sessionDate,
       sessionType,
       durationMins: durationMins ?? null,

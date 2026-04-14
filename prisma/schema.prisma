@@ -166,12 +166,13 @@ model Student {
   createdAt           DateTime           @default(now())
   updatedAt           DateTime           @updatedAt
 
-  caseloads         Caseload[]
-  ieps              IEP[]
-  goals             Goal[]
-  sessionStudents   SessionStudent[]
-  progressSummaries ProgressSummary[]
-  lessonPlans       LessonPlan[]
+  caseloads          Caseload[]
+  ieps               IEP[]
+  goals              Goal[]
+  sessionStudents    SessionStudent[]
+  progressSummaries  ProgressSummary[]
+  lessonPlans        LessonPlan[] @relation("LessonPlanPrimary")
+  lessonPlansSecond  LessonPlan[] @relation("LessonPlanSecondary")
 
   @@index([lastName, firstName])
   @@index([schoolName])
@@ -482,6 +483,7 @@ model LessonPlan {
   id           String   @id @default(cuid())
   userId       String
   studentId    String
+  studentId2   String?  // optional second student for group plans
   sessionDate  String   // yyyy-MM-dd
   sessionType  String   @default("INDIVIDUAL")
   durationMins Int?
@@ -491,8 +493,9 @@ model LessonPlan {
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
-  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
-  student Student @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  user     User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  student  Student @relation("LessonPlanPrimary",   fields: [studentId],  references: [id], onDelete: Cascade)
+  student2 Student? @relation("LessonPlanSecondary", fields: [studentId2], references: [id], onDelete: SetNull)
 
   @@index([studentId])
   @@index([userId])

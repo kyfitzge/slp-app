@@ -36,6 +36,8 @@ import {
   ClipboardList,
   History,
   Users,
+  UserPlus,
+  X,
 } from "lucide-react";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -53,6 +55,7 @@ interface StudentOption {
 interface LessonPlanItem {
   id: string;
   studentId: string;
+  studentId2?: string | null;
   sessionDate: string;
   sessionType: string;
   durationMins?: number | null;
@@ -254,6 +257,8 @@ function GoalChip({ goal }: { goal: StudentOption["goals"][0] }) {
 
 export function LessonPlanningPage({ students }: Props) {
   const [selectedStudentId, setSelectedStudentId] = useState<string | null>(null);
+  const [selectedStudentId2, setSelectedStudentId2] = useState<string | null>(null);
+  const [showStudent2Picker, setShowStudent2Picker] = useState(false);
   const [plans, setPlans] = useState<LessonPlanItem[]>([]);
   const [activePlan, setActivePlan] = useState<LessonPlanItem | null>(null);
   const [planText, setPlanText] = useState("");
@@ -274,6 +279,17 @@ export function LessonPlanningPage({ students }: Props) {
     [students, selectedStudentId]
   );
 
+  const selectedStudent2 = useMemo(
+    () => students.find(s => s.id === selectedStudentId2) ?? null,
+    [students, selectedStudentId2]
+  );
+
+  // Students available to add as second (excludes primary)
+  const availableForSecond = useMemo(
+    () => students.filter(s => s.id !== selectedStudentId && s.id !== selectedStudentId2),
+    [students, selectedStudentId, selectedStudentId2]
+  );
+
   const studentPlans = useMemo(
     () => plans.filter(p => p.studentId === selectedStudentId),
     [plans, selectedStudentId]
@@ -288,9 +304,11 @@ export function LessonPlanningPage({ students }: Props) {
   async function handleSelectStudent(id: string) {
     if (id === selectedStudentId) return;
     setSelectedStudentId(id);
+    setSelectedStudentId2(null);
     setActivePlan(null);
     setPlanText("");
     setShowHistory(false);
+    setShowStudent2Picker(false);
     setLoadingPlans(true);
     try {
       const res = await fetch(`/api/lesson-plans?studentId=${id}`);
@@ -305,6 +323,20 @@ export function LessonPlanningPage({ students }: Props) {
     finally { setLoadingPlans(false); }
   }
 
+  function handleAddSecondStudent(id: string) {
+    setSelectedStudentId2(id);
+    setShowStudent2Picker(false);
+    // Reset any existing plan when the student roster changes
+    setActivePlan(null);
+    setPlanText("");
+  }
+
+  function handleRemoveSecondStudent() {
+    setSelectedStudentId2(null);
+    setActivePlan(null);
+    setPlanText("");
+  }
+
   // ── Generate ───────────────────────────────────────────────────────────────
 
   async function handleGenerate() {
@@ -316,6 +348,7 @@ export function LessonPlanningPage({ students }: Props) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           studentId: selectedStudentId,
+          studentId2: selectedStudentId2 ?? undefined,
           sessionDate,
           sessionType,
           durationMins: parseInt(durationMins) || 30,
@@ -325,7 +358,7 @@ export function LessonPlanningPage({ students }: Props) {
       if (!res.ok) throw new Error("Generation failed");
       const data = await res.json();
       setPlanText(data.planText);
-      setActivePlan(null); // new unsaved plan
+      setActivePlan(null);
     } catch {
       toast.error("Failed to generate plan. Please try again.");
     } finally {
@@ -343,7 +376,12 @@ export function LessonPlanningPage({ students }: Props) {
         const res = await fetch(`/api/lesson-plans/${activePlan.id}`, {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ planText, sessionDate, sessionType, durationMins: parseInt(durationMins) || null, slpNotes: slpNotes.trim() || null }),
+          body: JSON.stringify({
+            planText, sessionDate, sessionType,
+            durationMins: parseInt(durationMins) || null,
+            slpNotes: slpNotes.trim() || null,
+            studentId2: selectedStudentId2 ?? null,
+          }),
         });
         if (!res.ok) throw new Error();
         const { plan } = await res.json();
@@ -357,6 +395,7 @@ export function LessonPlanningPage({ students }: Props) {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             studentId: selectedStudentId,
+            studentId2: selectedStudentId2 ?? null,
             sessionDate,
             sessionType,
             durationMins: parseInt(durationMins) || null,
@@ -382,7 +421,6 @@ export function LessonPlanningPage({ students }: Props) {
 
   async function handleDelete() {
     if (!activePlan) {
-      // Unsaved — just clear
       setPlanText("");
       setActivePlan(null);
       return;
@@ -411,6 +449,7 @@ export function LessonPlanningPage({ students }: Props) {
     setSessionType(plan.sessionType);
     setDurationMins(plan.durationMins?.toString() ?? "30");
     setSlpNotes(plan.slpNotes ?? "");
+    setSelectedStudentId2(plan.studentId2 ?? null);
     setShowHistory(false);
   }
 
@@ -492,17 +531,87 @@ export function LessonPlanningPage({ students }: Props) {
 
             {/* ── Header ── */}
             <div className="flex items-center justify-between px-6 py-4 border-b shrink-0 gap-3 flex-wrap">
-              <div>
-                <h2 className="text-base font-semibold">
-                  {selectedStudent.firstName} {selectedStudent.lastName}
-                </h2>
-                <p className="text-xs text-muted-foreground mt-0.5">
-                  {selectedStudent.goals.filter(g => g.status === "ACTIVE").length} active goal
-                  {selectedStudent.goals.filter(g => g.status === "ACTIVE").length !== 1 ? "s" : ""}
-                  {selectedStudent.gradeLevel ? ` · ${selectedStudent.gradeLevel}` : ""}
-                  {selectedStudent.schoolName ? ` · ${selectedStudent.schoolName}` : ""}
-                </p>
+              <div className="flex items-start gap-3 flex-wrap">
+                {/* Student name(s) */}
+                <div>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <h2 className="text-base font-semibold">
+                      {selectedStudent.firstName} {selectedStudent.lastName}
+                    </h2>
+                    {selectedStudent2 && (
+                      <>
+                        <span className="text-muted-foreground text-sm">&amp;</span>
+                        <div className="flex items-center gap-1">
+                          <span className="text-base font-semibold">
+                            {selectedStudent2.firstName} {selectedStudent2.lastName}
+                          </span>
+                          <button
+                            onClick={handleRemoveSecondStudent}
+                            className="ml-0.5 rounded-full p-0.5 hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
+                            title="Remove second student"
+                          >
+                            <X className="h-3.5 w-3.5" />
+                          </button>
+                        </div>
+                      </>
+                    )}
+                  </div>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    {selectedStudent2
+                      ? "Group session"
+                      : <>
+                          {selectedStudent.goals.filter(g => g.status === "ACTIVE").length} active goal
+                          {selectedStudent.goals.filter(g => g.status === "ACTIVE").length !== 1 ? "s" : ""}
+                          {selectedStudent.gradeLevel ? ` · ${selectedStudent.gradeLevel}` : ""}
+                          {selectedStudent.schoolName ? ` · ${selectedStudent.schoolName}` : ""}
+                        </>
+                    }
+                  </p>
+                </div>
+
+                {/* Add second student picker */}
+                {!selectedStudent2 && (
+                  <div className="relative mt-0.5">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="gap-1.5 h-7 text-xs border-dashed"
+                      onClick={() => setShowStudent2Picker(p => !p)}
+                    >
+                      <UserPlus className="h-3.5 w-3.5" />
+                      Add student
+                    </Button>
+                    {showStudent2Picker && (
+                      <div className="absolute left-0 top-full mt-1 w-60 bg-card border rounded-lg shadow-lg z-50 overflow-hidden">
+                        <div className="text-xs font-medium text-muted-foreground px-3 py-2 border-b bg-muted/30">
+                          Add second student
+                        </div>
+                        {availableForSecond.length === 0 ? (
+                          <p className="text-xs text-muted-foreground p-3 text-center">No other students on caseload.</p>
+                        ) : (
+                          <div className="max-h-52 overflow-y-auto">
+                            {availableForSecond.map(s => (
+                              <button
+                                key={s.id}
+                                onClick={() => handleAddSecondStudent(s.id)}
+                                className="w-full text-left px-3 py-2.5 text-sm hover:bg-muted/50 transition-colors border-b last:border-0"
+                              >
+                                <div className="font-medium">{s.firstName} {s.lastName}</div>
+                                <div className="text-xs text-muted-foreground">
+                                  {s.goals.filter(g => g.status === "ACTIVE").length} active goal
+                                  {s.goals.filter(g => g.status === "ACTIVE").length !== 1 ? "s" : ""}
+                                  {s.gradeLevel ? ` · ${s.gradeLevel}` : ""}
+                                </div>
+                              </button>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
+
               <div className="flex items-center gap-2">
                 {/* History dropdown */}
                 <div className="relative">
@@ -569,15 +678,36 @@ export function LessonPlanningPage({ students }: Props) {
             </div>
 
             {/* ── Active goal chips ── */}
-            {selectedStudent.goals.filter(g => g.status === "ACTIVE").length > 0 && (
+            {(selectedStudent.goals.filter(g => g.status === "ACTIVE").length > 0 ||
+              (selectedStudent2 && selectedStudent2.goals.filter(g => g.status === "ACTIVE").length > 0)) && (
               <div className="px-6 py-3 border-b shrink-0">
-                <div className="flex items-center gap-2 overflow-x-auto pb-1">
-                  <span className="text-xs text-muted-foreground font-medium shrink-0">Active goals:</span>
-                  {selectedStudent.goals
-                    .filter(g => g.status === "ACTIVE")
-                    .map(goal => <GoalChip key={goal.id} goal={goal} />)
-                  }
-                </div>
+                {selectedStudent2 ? (
+                  /* Two-student layout: show each student's goals in a labeled row */
+                  <div className="space-y-2">
+                    {[
+                      { student: selectedStudent, label: selectedStudent.firstName },
+                      { student: selectedStudent2, label: selectedStudent2.firstName },
+                    ].map(({ student, label }) => {
+                      const activeGoals = student.goals.filter(g => g.status === "ACTIVE");
+                      if (activeGoals.length === 0) return null;
+                      return (
+                        <div key={student.id} className="flex items-center gap-2 overflow-x-auto pb-0.5">
+                          <span className="text-xs font-semibold text-muted-foreground shrink-0 w-16 truncate">{label}:</span>
+                          {activeGoals.map(goal => <GoalChip key={goal.id} goal={goal} />)}
+                        </div>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  /* Single-student layout */
+                  <div className="flex items-center gap-2 overflow-x-auto pb-1">
+                    <span className="text-xs text-muted-foreground font-medium shrink-0">Active goals:</span>
+                    {selectedStudent.goals
+                      .filter(g => g.status === "ACTIVE")
+                      .map(goal => <GoalChip key={goal.id} goal={goal} />)
+                    }
+                  </div>
+                )}
               </div>
             )}
 
@@ -589,7 +719,10 @@ export function LessonPlanningPage({ students }: Props) {
                   <div className="mb-6">
                     <h3 className="text-sm font-semibold mb-1">Plan Your Next Session</h3>
                     <p className="text-xs text-muted-foreground">
-                      The AI will use {selectedStudent.firstName}'s active IEP goals, recent session data, and your notes to build a ready-to-use lesson plan.
+                      {selectedStudent2
+                        ? `The AI will use ${selectedStudent.firstName} and ${selectedStudent2.firstName}'s IEP goals, recent session data, and your notes to build a shared group lesson plan.`
+                        : `The AI will use ${selectedStudent.firstName}'s active IEP goals, recent session data, and your notes to build a ready-to-use lesson plan.`
+                      }
                     </p>
                   </div>
 

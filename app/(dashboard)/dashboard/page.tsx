@@ -126,6 +126,11 @@ export default async function DashboardPage() {
                 hasNotes:       s.notes.length > 0,
                 sessionStudents: s.sessionStudents,
               }))}
+              students={students.map(s => ({
+                id:        s.id,
+                firstName: s.firstName,
+                lastName:  s.lastName,
+              }))}
             />
           </CardContent>
         </Card>
