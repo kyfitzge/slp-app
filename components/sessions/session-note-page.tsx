@@ -2301,26 +2301,50 @@ export function SessionNotePage({
   const [completed, setCompleted] = useState(false);
 
   async function markComplete() {
-    if (!noteDraft.trim()) {
-      toast.error("Please add a session note before completing.");
-      return;
+    if (isGroup) {
+      // For group sessions, every present student must have a note
+      const presentStudents = students.filter(
+        (s) => (attendance[s.id] ?? s.attendance) === "PRESENT" || (attendance[s.id] ?? s.attendance) === "MAKEUP"
+      );
+      const missing = presentStudents.filter((s) => !studentNoteDrafts[s.id]?.trim());
+      if (missing.length > 0) {
+        toast.error(`Please add notes for: ${missing.map((s) => s.firstName).join(", ")}`);
+        return;
+      }
+    } else {
+      if (!noteDraft.trim()) {
+        toast.error("Please add a session note before completing.");
+        return;
+      }
     }
+
     setCompleting(true);
     try {
-      const finalNote = noteDraft.trim();
-      const completeBody: { noteText: string; studentId?: string } = { noteText: finalNote };
-      if (isGroup) completeBody.studentId = activeStudentId;
-      const res = await fetch(`/api/sessions/${sessionId}/notes`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(completeBody),
-      });
-      if (!res.ok) throw new Error();
+      if (isGroup) {
+        // Save each student's note individually in parallel
+        const saves = students
+          .filter((s) => studentNoteDrafts[s.id]?.trim())
+          .map((s) =>
+            fetch(`/api/sessions/${sessionId}/notes`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ noteText: studentNoteDrafts[s.id].trim(), studentId: s.id }),
+            }).then((r) => { if (!r.ok) throw new Error(`Failed for ${s.firstName}`); })
+          );
+        await Promise.all(saves);
+      } else {
+        const res = await fetch(`/api/sessions/${sessionId}/notes`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ noteText: noteDraft.trim() }),
+        });
+        if (!res.ok) throw new Error();
+      }
       setCompleted(true);
       toast.success("Documentation complete");
       router.refresh();
-    } catch {
-      toast.error("Failed to save — please try again");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to save — please try again");
     } finally {
       setCompleting(false);
     }

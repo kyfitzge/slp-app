@@ -72,10 +72,21 @@ interface Props {
 function getDocStatus(session: SessionRow): DocStatus {
   if (session.isCancelled) return "cancelled";
   if (session.notes.length === 0) return "needs_note";
-  const hasSubstantial = session.notes.some(
+
+  const isGroup = session.sessionStudents.length > 1;
+  const substantialNotes = session.notes.filter(
     (n) => n.isLocked || (n.noteText && n.noteText.trim().length >= 60)
   );
-  return hasSubstantial ? "complete" : "in_progress";
+
+  if (isGroup) {
+    // Complete only when every student in the group has a substantial note
+    const studentCount = session.sessionStudents.length;
+    if (substantialNotes.length === 0) return "needs_note";
+    if (substantialNotes.length < studentCount) return "in_progress";
+    return "complete";
+  }
+
+  return substantialNotes.length > 0 ? "complete" : "in_progress";
 }
 
 function isOverdue(session: SessionRow, status: DocStatus): boolean {

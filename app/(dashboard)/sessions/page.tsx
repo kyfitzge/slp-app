@@ -13,9 +13,19 @@ export default async function SessionsPage() {
     getStudentsByUserId(user!.id),
   ]);
 
-  const needsNote = sessions.filter(
-    (s) => !s.isCancelled && s.notes.length === 0
-  ).length;
+  const needsNote = sessions.filter((s) => {
+    if (s.isCancelled) return false;
+    if (s.notes.length === 0) return true;
+    // Group session: incomplete if fewer substantial notes than students
+    const studentCount = s.sessionStudents.length;
+    if (studentCount > 1) {
+      const substantial = s.notes.filter(
+        (n) => n.isLocked || (n.noteText && n.noteText.trim().length >= 60)
+      ).length;
+      return substantial < studentCount;
+    }
+    return false;
+  }).length;
 
   const students = rawStudents.map((s) => ({
     id: s.id,
