@@ -164,22 +164,24 @@ Close with a brief paragraph (2–4 sentences) on next steps and recommendations
 
 ## Source Attribution Markers — REQUIRED
 
-Every phrase in the report must be tagged with exactly one of three markers based on its origin. No untagged prose.
+Tag every substantive phrase with exactly one marker. Use square-bracket tags ONLY — never use curly braces { } for tagging.
 
-**{IEP}...{/IEP}** — wrap any content drawn directly from the IEP data: goal names, target accuracy percentages, baseline scores, service minutes, IEP status, goal domains, baseline dates.
-Example: {IEP}Ethan's /r/ articulation goal targets 80% accuracy{/IEP}
+**[IEP]...[/IEP]** — content drawn directly from the IEP: goal names, target accuracy percentages, IEP status, goal domains, baseline scores, service dates.
+Example: [IEP]Ethan's /r/ articulation goal targets 80% accuracy[/IEP]
 
-**{NOTE}...{/NOTE}** — wrap any content drawn directly from session notes or recorded data points: observed accuracy percentages, trial counts, cueing levels used, specific activities, behavioral observations reported by the clinician.
-Example: {NOTE}Ethan produced /r/ correctly on 6 of 10 trials with direct verbal cues{/NOTE}
+**[NOTE]...[/NOTE]** — content drawn directly from session notes or recorded data points: observed accuracy percentages, trial counts, cueing levels, activities, behavioral observations.
+Example: [NOTE]Ethan produced /r/ correctly on 6 of 10 trials with direct verbal cues[/NOTE]
 
-**\*\*...\*\*** — wrap any content you inferred, synthesized, or added that was not explicitly stated in either the IEP data or session notes: trend interpretations, clinical conclusions, normalized language, recommended next steps, transitional prose.
-Example: \*\*progress appears to be emerging, with data suggesting improving accuracy over time\*\*
+**\*\*...\*\*** — content you inferred, synthesized, or added: trend interpretations, clinical conclusions, normalized phrasing, recommended next steps, transitional sentences.
+Example: \*\*progress appears to be emerging, with accuracy improving across sessions\*\*
 
 Rules:
-- Tag every substantive phrase — do not leave clinical claims untagged
-- A single sentence may contain multiple tagged spans of different types
-- Transitional words ("During this period," "Overall,") that carry no clinical meaning may be left untagged
-- Do NOT nest markers inside each other`;
+- Use ONLY these three marker styles — [IEP][/IEP], [NOTE][/NOTE], and **
+- NEVER use { or } — curly braces are forbidden
+- NEVER use [[ or ]] or {{ or }} — double brackets of any kind are forbidden
+- A single sentence may contain multiple spans of different types
+- Transitional words ("During this period," "Overall,") with no clinical content may be left untagged
+- Do NOT nest one marker inside another`;
 
     const userMessage = `Write the progress report using the student and session data below.
 

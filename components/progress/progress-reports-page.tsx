@@ -40,7 +40,7 @@ type ReportSegment =
   | { type: "note"; content: string };
 
 function parseReportSegments(text: string): ReportSegment[] {
-  const regex = /\*\*([^*]+)\*\*|\{IEP\}([\s\S]*?)\{\/IEP\}|\{NOTE\}([\s\S]*?)\{\/NOTE\}/g;
+  const regex = /\*\*([^*]+)\*\*|\[IEP\]([\s\S]*?)\[\/IEP\]|\[NOTE\]([\s\S]*?)\[\/NOTE\]/g;
   const segments: ReportSegment[] = [];
   let lastIdx = 0;
   let inferIdx = 0;
@@ -59,14 +59,14 @@ function parseReportSegments(text: string): ReportSegment[] {
 function stripReportMarkers(text: string): string {
   return text
     .replace(/\*\*([^*]+)\*\*/g, "$1")
-    .replace(/\{IEP\}([\s\S]*?)\{\/IEP\}/g, "$1")
-    .replace(/\{NOTE\}([\s\S]*?)\{\/NOTE\}/g, "$1")
+    .replace(/\[IEP\]([\s\S]*?)\[\/IEP\]/g, "$1")
+    .replace(/\[NOTE\]([\s\S]*?)\[\/NOTE\]/g, "$1")
     // Remove any orphaned / malformed marker tags left by imperfect AI output
-    .replace(/\{\/?(IEP|NOTE)\}/g, "");
+    .replace(/\[\/?(IEP|NOTE)\]/g, "");
 }
 
 function hasReportMarkers(text: string): boolean {
-  return /\*\*[^*]+\*\*|\{IEP\}[\s\S]*?\{\/IEP\}|\{NOTE\}[\s\S]*?\{\/NOTE\}/.test(text);
+  return /\*\*[^*]+\*\*|\[IEP\][\s\S]*?\[\/IEP\]|\[NOTE\][\s\S]*?\[\/NOTE\]/.test(text);
 }
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
@@ -670,14 +670,24 @@ export function ProgressReportsPage({ initialReports, students }: Props) {
                           if (seg.type === "text") return <span key={i}>{seg.content}</span>;
 
                           if (seg.type === "iep") return (
-                            <span key={i} className="font-semibold text-blue-600">
-                              {seg.content}
+                            <span key={i} className="inline">
+                              <mark className="bg-blue-100 text-blue-900 rounded px-0.5 font-medium not-italic">
+                                {seg.content}
+                              </mark>
+                              <span className="inline-flex items-center ml-0.5 align-middle">
+                                <span className="text-[9px] font-bold text-blue-600 bg-blue-100 border border-blue-200 rounded px-1 py-px leading-none">IEP</span>
+                              </span>
                             </span>
                           );
 
                           if (seg.type === "note") return (
-                            <span key={i} className="font-semibold text-emerald-600">
-                              {seg.content}
+                            <span key={i} className="inline">
+                              <mark className="bg-emerald-100 text-emerald-900 rounded px-0.5 font-medium not-italic">
+                                {seg.content}
+                              </mark>
+                              <span className="inline-flex items-center ml-0.5 align-middle">
+                                <span className="text-[9px] font-bold text-emerald-600 bg-emerald-100 border border-emerald-200 rounded px-1 py-px leading-none">NOTE</span>
+                              </span>
                             </span>
                           );
 
@@ -719,10 +729,10 @@ export function ProgressReportsPage({ initialReports, students }: Props) {
                       </div>
                       {/* Preview action row */}
                       <div className="flex items-center gap-3 shrink-0 flex-wrap">
-                        <span className="flex items-center gap-3 text-xs text-muted-foreground">
+                        <span className="flex items-center gap-4 text-xs text-muted-foreground">
                           <span className="flex items-center gap-1"><span className="inline-block h-2.5 w-2.5 rounded-sm bg-amber-200" /> AI inferred</span>
-                          <span className="flex items-center gap-1 font-semibold text-blue-600">IEP data</span>
-                          <span className="flex items-center gap-1 font-semibold text-emerald-600">Session notes</span>
+                          <span className="flex items-center gap-1"><span className="inline-block h-2.5 w-2.5 rounded-sm bg-blue-200" /> From IEP</span>
+                          <span className="flex items-center gap-1"><span className="inline-block h-2.5 w-2.5 rounded-sm bg-emerald-200" /> From session notes</span>
                         </span>
                         <div className="ml-auto flex items-center gap-2">
                           <button
@@ -739,9 +749,9 @@ export function ProgressReportsPage({ initialReports, students }: Props) {
                               setEditor((prev) => ({
                                 ...prev,
                                 text: prev.text
-                                  .replace(/\{IEP\}([\s\S]*?)\{\/IEP\}/g, "$1")
-                                  .replace(/\{NOTE\}([\s\S]*?)\{\/NOTE\}/g, "$1")
-                                  .replace(/\{\/?(IEP|NOTE)\}/g, ""),
+                                  .replace(/\[IEP\]([\s\S]*?)\[\/IEP\]/g, "$1")
+                                  .replace(/\[NOTE\]([\s\S]*?)\[\/NOTE\]/g, "$1")
+                                  .replace(/\[\/?(IEP|NOTE)\]/g, ""),
                               }));
                               setReportPreviewMode(false);
                             }}
