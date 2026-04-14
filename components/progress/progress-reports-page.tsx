@@ -60,7 +60,9 @@ function stripReportMarkers(text: string): string {
   return text
     .replace(/\*\*([^*]+)\*\*/g, "$1")
     .replace(/\{IEP\}([\s\S]*?)\{\/IEP\}/g, "$1")
-    .replace(/\{NOTE\}([\s\S]*?)\{\/NOTE\}/g, "$1");
+    .replace(/\{NOTE\}([\s\S]*?)\{\/NOTE\}/g, "$1")
+    // Remove any orphaned / malformed marker tags left by imperfect AI output
+    .replace(/\{\/?(IEP|NOTE)\}/g, "");
 }
 
 function hasReportMarkers(text: string): boolean {
@@ -748,7 +750,8 @@ export function ProgressReportsPage({ initialReports, students }: Props) {
                                 ...prev,
                                 text: prev.text
                                   .replace(/\{IEP\}([\s\S]*?)\{\/IEP\}/g, "$1")
-                                  .replace(/\{NOTE\}([\s\S]*?)\{\/NOTE\}/g, "$1"),
+                                  .replace(/\{NOTE\}([\s\S]*?)\{\/NOTE\}/g, "$1")
+                                  .replace(/\{\/?(IEP|NOTE)\}/g, ""),
                               }));
                               setReportPreviewMode(false);
                             }}
