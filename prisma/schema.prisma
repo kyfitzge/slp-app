@@ -171,8 +171,7 @@ model Student {
   goals              Goal[]
   sessionStudents    SessionStudent[]
   progressSummaries  ProgressSummary[]
-  lessonPlans        LessonPlan[] @relation("LessonPlanPrimary")
-  lessonPlansSecond  LessonPlan[] @relation("LessonPlanSecondary")
+  lessonPlans        LessonPlan[]
 
   @@index([lastName, firstName])
   @@index([schoolName])
@@ -480,22 +479,21 @@ model ProgressSummary {
 // ─────────────────────────────────────────────
 
 model LessonPlan {
-  id           String   @id @default(cuid())
-  userId       String
-  studentId    String
-  studentId2   String?  // optional second student for group plans
-  sessionDate  String   // yyyy-MM-dd
-  sessionType  String   @default("INDIVIDUAL")
-  durationMins Int?
-  slpNotes     String?  // SLP's focus/preferences input
-  planText     String   // Full AI-generated plan (markdown sections)
-  isDraft      Boolean  @default(true)
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  id                   String   @id @default(cuid())
+  userId               String
+  studentId            String
+  additionalStudentIds String[] @default([])
+  sessionDate          String   // yyyy-MM-dd
+  sessionType          String   @default("INDIVIDUAL")
+  durationMins         Int?
+  slpNotes             String?  // SLP's focus/preferences input
+  planText             String   // Full AI-generated plan (markdown sections)
+  isDraft              Boolean  @default(true)
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
 
-  user     User    @relation(fields: [userId], references: [id], onDelete: Cascade)
-  student  Student @relation("LessonPlanPrimary",   fields: [studentId],  references: [id], onDelete: Cascade)
-  student2 Student? @relation("LessonPlanSecondary", fields: [studentId2], references: [id], onDelete: SetNull)
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  student Student @relation(fields: [studentId], references: [id], onDelete: Cascade)
 
   @@index([studentId])
   @@index([userId])

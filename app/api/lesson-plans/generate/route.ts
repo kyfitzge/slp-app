@@ -52,23 +52,30 @@ export async function POST(request: Request) {
     const user = await requireUser();
     const body = await request.json() as {
       studentId: string;
-      studentId2?: string | null;
+      additionalStudentIds?: string[];
       sessionDate: string;
       sessionType: string;
       durationMins?: number;
       slpNotes?: string;
     };
 
-    const { studentId, studentId2, sessionDate, sessionType, durationMins = 30, slpNotes } = body;
+    const { studentId, additionalStudentIds, sessionDate, sessionType, durationMins = 30, slpNotes } = body;
     if (!studentId || !sessionDate || !sessionType) {
       return NextResponse.json({ error: "studentId, sessionDate, and sessionType are required" }, { status: 400 });
     }
 
-    const { student, sessions, student2, sessions2 } = await getDataForLessonPlan(user.id, studentId, studentId2 ?? null);
+    const { student, sessions, additionalStudents } = await getDataForLessonPlan(
+      user.id,
+      studentId,
+      additionalStudentIds ?? []
+    );
     if (!student) return NextResponse.json({ error: "Student not found" }, { status: 404 });
 
-    const isGroup = !!student2;
+    const isGroup = additionalStudents.length > 0;
     const sessionLabel = SESSION_TYPE_LABEL[sessionType] ?? sessionType;
+
+    // All student objects (primary + additional)
+    const allStudents = [student, ...additionalStudents.map(a => a.student)].filter(Boolean);
 
     // ── IEP sections ─────────────────────────────────────────────────────────
     const buildIepSection = (s: StudentData) => {
@@ -83,23 +90,28 @@ export async function POST(request: Request) {
     };
 
     // ── System prompt ─────────────────────────────────────────────────────────
-    const systemPrompt = `You are an experienced school-based Speech-Language Pathologist creating a practical, ready-to-use session lesson plan${isGroup ? " for a group session with two students" : ""}. Write as a clinical colleague — concise, specific, and immediately actionable.
+    const groupStudentNames = allStudents.map(s => s!.firstName).join(", ");
 
-${isGroup ? `This is a GROUP SESSION. Both students are present. Design activities that:
-- Can be delivered to both students simultaneously
+    const systemPrompt = `You are an experienced school-based Speech-Language Pathologist creating a practical, ready-to-use session lesson plan${isGroup ? ` for a group session with ${allStudents.length} students` : ""}. Write as a clinical colleague — concise, specific, and immediately actionable.
+
+${isGroup ? `This is a GROUP SESSION with ${allStudents.length} students (${groupStudentNames}). Design activities that:
+- Can be delivered to all students simultaneously
 - Allow independent skill targets for each student within shared activities
 - Specify clearly which cueing or target applies to which student (use first names)
-- Balance time and attention fairly between both students
+- Balance time and attention fairly among all students
 ` : ""}
 Use each student's recent performance data to prioritize goals with lower or inconsistent accuracy, match cueing to current skill level, and build in natural data collection moments.
 
 OUTPUT FORMAT — use these exact section headers:
 
 ## LEARNING OBJECTIVES
-${isGroup ? `List 2–3 bullets per student, labeled "${student.firstName}:" and "${student2!.firstName}:". Each starts with the student's name and "will..."` : `List 2–4 bullets starting with "${student.firstName} will..."`}
+${isGroup
+  ? allStudents.map(s => `List 2–3 bullets labeled "${s!.firstName}:" — each starts with the student's name and "will..."`).join("\n")
+  : `List 2–4 bullets starting with "${student.firstName} will..."`
+}
 
 ## WARM-UP (5 min)
-${isGroup ? "A shared activity that engages both students." : "A brief, low-stakes activity to focus the student."}
+${isGroup ? "A shared activity that engages all students." : "A brief, low-stakes activity to focus the student."}
 
 ## ACTIVITY 1: [DESCRIPTIVE TITLE] ([X] min)
 **Target:** [goal / domain${isGroup ? " — specify student if different" : ""}]
@@ -117,7 +129,7 @@ ${isGroup ? "A shared activity that engages both students." : "A brief, low-stak
 Brief review or self-monitoring check-in.
 
 ## HOME PRACTICE
-1–2 parent-friendly carryover activities.${isGroup ? " Can address both students or be student-specific." : ""}
+1–2 parent-friendly carryover activities.${isGroup ? " Can address all students or be student-specific." : ""}
 
 ## MATERIALS NEEDED
 Bullet list of everything required.
@@ -130,12 +142,19 @@ Keep it tight. No padding. Write as if handing this to a colleague 10 minutes be
     if (slpNotes) userMessage += `\nSLP NOTES / FOCUS:\n${slpNotes}\n`;
 
     if (isGroup) {
+      // Primary student
       userMessage += `\n${"─".repeat(60)}\nSTUDENT 1: ${student.firstName} ${student.lastName}`;
       if (student.gradeLevel) userMessage += `\nGrade: ${student.gradeLevel}`;
       userMessage += `\n\nACTIVE IEP:\n${buildIepSection(student)}\n\nACTIVE GOALS AND RECENT DATA:\n${buildGoalsSection(student)}\n\nRECENT SESSIONS:\n${buildSessionsSection(sessions)}`;
-      userMessage += `\n\n${"─".repeat(60)}\nSTUDENT 2: ${student2!.firstName} ${student2!.lastName}`;
-      if (student2!.gradeLevel) userMessage += `\nGrade: ${student2!.gradeLevel}`;
-      userMessage += `\n\nACTIVE IEP:\n${buildIepSection(student2)}\n\nACTIVE GOALS AND RECENT DATA:\n${buildGoalsSection(student2)}\n\nRECENT SESSIONS:\n${buildSessionsSection(sessions2)}`;
+
+      // Additional students
+      additionalStudents.forEach((entry, idx) => {
+        const s = entry.student;
+        const sIdx = idx + 2;
+        userMessage += `\n\n${"─".repeat(60)}\nSTUDENT ${sIdx}: ${s!.firstName} ${s!.lastName}`;
+        if (s!.gradeLevel) userMessage += `\nGrade: ${s!.gradeLevel}`;
+        userMessage += `\n\nACTIVE IEP:\n${buildIepSection(s)}\n\nACTIVE GOALS AND RECENT DATA:\n${buildGoalsSection(s)}\n\nRECENT SESSIONS:\n${buildSessionsSection(entry.sessions)}`;
+      });
     } else {
       userMessage += `\nSTUDENT: ${student.firstName} ${student.lastName}`;
       if (student.gradeLevel) userMessage += `\nGrade: ${student.gradeLevel}`;

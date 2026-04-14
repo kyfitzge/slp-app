@@ -6,7 +6,7 @@ export async function getLessonPlansByStudent(studentId: string, userId: string)
     select: {
       id: true,
       studentId: true,
-      studentId2: true,
+      additionalStudentIds: true,
       sessionDate: true,
       sessionType: true,
       durationMins: true,
@@ -15,7 +15,6 @@ export async function getLessonPlansByStudent(studentId: string, userId: string)
       isDraft: true,
       createdAt: true,
       updatedAt: true,
-      student2: { select: { id: true, firstName: true, lastName: true } },
     },
     orderBy: { createdAt: "desc" },
   });
@@ -24,8 +23,18 @@ export async function getLessonPlansByStudent(studentId: string, userId: string)
 export async function getLessonPlanById(planId: string, userId: string) {
   return prisma.lessonPlan.findFirst({
     where: { id: planId, userId },
-    include: {
-      student2: { select: { id: true, firstName: true, lastName: true } },
+    select: {
+      id: true,
+      studentId: true,
+      additionalStudentIds: true,
+      sessionDate: true,
+      sessionType: true,
+      durationMins: true,
+      slpNotes: true,
+      planText: true,
+      isDraft: true,
+      createdAt: true,
+      updatedAt: true,
     },
   });
 }
@@ -33,7 +42,7 @@ export async function getLessonPlanById(planId: string, userId: string) {
 export async function createLessonPlan(data: {
   userId: string;
   studentId: string;
-  studentId2?: string | null;
+  additionalStudentIds?: string[];
   sessionDate: string;
   sessionType: string;
   durationMins?: number | null;
@@ -53,7 +62,7 @@ export async function updateLessonPlan(
     sessionType?: string;
     durationMins?: number | null;
     slpNotes?: string | null;
-    studentId2?: string | null;
+    additionalStudentIds?: string[];
     isDraft?: boolean;
   }
 ) {
@@ -160,19 +169,22 @@ async function fetchStudentPlanData(userId: string, studentId: string) {
   return { student, sessions: sessions.reverse() };
 }
 
-/** Fetch clinical data for one or two students. */
+/** Fetch clinical data for a primary student and any number of additional students. */
 export async function getDataForLessonPlan(
   userId: string,
   studentId: string,
-  studentId2?: string | null
+  additionalStudentIds: string[] = []
 ) {
-  if (studentId2) {
-    const [primary, secondary] = await Promise.all([
-      fetchStudentPlanData(userId, studentId),
-      fetchStudentPlanData(userId, studentId2),
-    ]);
-    return { student: primary.student, sessions: primary.sessions, student2: secondary.student, sessions2: secondary.sessions };
-  }
-  const { student, sessions } = await fetchStudentPlanData(userId, studentId);
-  return { student, sessions, student2: null, sessions2: [] };
+  const ids = additionalStudentIds.filter(Boolean);
+
+  const [primary, ...additionalResults] = await Promise.all([
+    fetchStudentPlanData(userId, studentId),
+    ...ids.map(id => fetchStudentPlanData(userId, id)),
+  ]);
+
+  return {
+    student: primary.student,
+    sessions: primary.sessions,
+    additionalStudents: additionalResults,
+  };
 }

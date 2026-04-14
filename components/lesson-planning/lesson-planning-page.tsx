@@ -55,7 +55,7 @@ interface StudentOption {
 interface LessonPlanItem {
   id: string;
   studentId: string;
-  studentId2?: string | null;
+  additionalStudentIds?: string[];
   sessionDate: string;
   sessionType: string;
   durationMins?: number | null;
@@ -257,8 +257,8 @@ function GoalChip({ goal }: { goal: StudentOption["goals"][0] }) {
 
 export function LessonPlanningPage({ students }: Props) {
   const [selectedStudentId, setSelectedStudentId] = useState<string | null>(null);
-  const [selectedStudentId2, setSelectedStudentId2] = useState<string | null>(null);
-  const [showStudent2Picker, setShowStudent2Picker] = useState(false);
+  const [additionalStudentIds, setAdditionalStudentIds] = useState<string[]>([]);
+  const [showStudentPicker, setShowStudentPicker] = useState(false);
   const [plans, setPlans] = useState<LessonPlanItem[]>([]);
   const [activePlan, setActivePlan] = useState<LessonPlanItem | null>(null);
   const [planText, setPlanText] = useState("");
@@ -280,16 +280,18 @@ export function LessonPlanningPage({ students }: Props) {
     [students, selectedStudentId]
   );
 
-  const selectedStudent2 = useMemo(
-    () => students.find(s => s.id === selectedStudentId2) ?? null,
-    [students, selectedStudentId2]
+  const additionalStudents = useMemo(
+    () => additionalStudentIds.map(id => students.find(s => s.id === id)).filter((s): s is StudentOption => s !== undefined),
+    [students, additionalStudentIds]
   );
 
-  // Students available to add as second (excludes primary)
-  const availableForSecond = useMemo(
-    () => students.filter(s => s.id !== selectedStudentId && s.id !== selectedStudentId2),
-    [students, selectedStudentId, selectedStudentId2]
+  // Students available to add (excludes primary and already-added)
+  const availableToAdd = useMemo(
+    () => students.filter(s => s.id !== selectedStudentId && !additionalStudentIds.includes(s.id)),
+    [students, selectedStudentId, additionalStudentIds]
   );
+
+  const isGroup = additionalStudentIds.length > 0;
 
   const studentPlans = useMemo(
     () => plans.filter(p => p.studentId === selectedStudentId),
@@ -297,6 +299,7 @@ export function LessonPlanningPage({ students }: Props) {
   );
 
   const sections = useMemo(() => parsePlanSections(planText), [planText]);
+
   const hasUnsavedPlan = planText.trim().length > 0 && !activePlan;
   const hasPlan = planText.trim().length > 0;
 
@@ -305,11 +308,11 @@ export function LessonPlanningPage({ students }: Props) {
   async function handleSelectStudent(id: string) {
     if (id === selectedStudentId) return;
     setSelectedStudentId(id);
-    setSelectedStudentId2(null);
+    setAdditionalStudentIds([]);
     setActivePlan(null);
     setPlanText("");
     setShowHistory(false);
-    setShowStudent2Picker(false);
+    setShowStudentPicker(false);
     setLoadingPlans(true);
     try {
       const res = await fetch(`/api/lesson-plans?studentId=${id}`);
@@ -324,16 +327,17 @@ export function LessonPlanningPage({ students }: Props) {
     finally { setLoadingPlans(false); }
   }
 
-  function handleAddSecondStudent(id: string) {
-    setSelectedStudentId2(id);
-    setShowStudent2Picker(false);
+  function handleAddStudent(id: string) {
+    if (additionalStudentIds.includes(id) || id === selectedStudentId) return;
+    setAdditionalStudentIds(prev => [...prev, id]);
+    setShowStudentPicker(false);
     // Reset any existing plan when the student roster changes
     setActivePlan(null);
     setPlanText("");
   }
 
-  function handleRemoveSecondStudent() {
-    setSelectedStudentId2(null);
+  function handleRemoveStudent(id: string) {
+    setAdditionalStudentIds(prev => prev.filter(sid => sid !== id));
     setActivePlan(null);
     setPlanText("");
   }
@@ -349,7 +353,7 @@ export function LessonPlanningPage({ students }: Props) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           studentId: selectedStudentId,
-          studentId2: selectedStudentId2 ?? undefined,
+          additionalStudentIds,
           sessionDate,
           sessionType,
           durationMins: parseInt(durationMins) || 30,
@@ -381,7 +385,7 @@ export function LessonPlanningPage({ students }: Props) {
             planText, sessionDate, sessionType,
             durationMins: parseInt(durationMins) || null,
             slpNotes: slpNotes.trim() || null,
-            studentId2: selectedStudentId2 ?? null,
+            additionalStudentIds,
           }),
         });
         if (!res.ok) throw new Error();
@@ -396,7 +400,7 @@ export function LessonPlanningPage({ students }: Props) {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             studentId: selectedStudentId,
-            studentId2: selectedStudentId2 ?? null,
+            additionalStudentIds,
             sessionDate,
             sessionType,
             durationMins: parseInt(durationMins) || null,
@@ -450,7 +454,7 @@ export function LessonPlanningPage({ students }: Props) {
     setSessionType(plan.sessionType);
     setDurationMins(plan.durationMins?.toString() ?? "30");
     setSlpNotes(plan.slpNotes ?? "");
-    setSelectedStudentId2(plan.studentId2 ?? null);
+    setAdditionalStudentIds(plan.additionalStudentIds ?? []);
     setShowHistory(false);
   }
 
@@ -476,12 +480,12 @@ export function LessonPlanningPage({ students }: Props) {
       const { studentId } = data;
       if (!studentId) return;
       if (target === "primary") {
-        // Dropping on primary slot: select this as primary student, clear secondary
+        // Dropping on primary slot: select this as primary student, clear additional
         void handleSelectStudent(studentId);
       } else {
-        // Dropping on secondary slot: only allowed when primary is already set and this isn't the primary
+        // Dropping on secondary slot: only allowed when primary is already set and this isn't already included
         if (!selectedStudentId || studentId === selectedStudentId) return;
-        handleAddSecondStudent(studentId);
+        handleAddStudent(studentId);
       }
     } catch { /* ignore */ }
   }
@@ -562,32 +566,32 @@ export function LessonPlanningPage({ students }: Props) {
             {/* ── Header ── */}
             <div className="flex items-center justify-between px-6 py-4 border-b shrink-0 gap-3 flex-wrap">
               <div className="flex items-start gap-3 flex-wrap">
-                {/* Student name(s) */}
+                {/* Primary + additional student names */}
                 <div>
                   <div className="flex items-center gap-2 flex-wrap">
                     <h2 className="text-base font-semibold">
                       {selectedStudent.firstName} {selectedStudent.lastName}
                     </h2>
-                    {selectedStudent2 && (
-                      <>
-                        <span className="text-muted-foreground text-sm">&amp;</span>
-                        <div className="flex items-center gap-1">
+                    {additionalStudents.map(s => (
+                      <span key={s.id} className="flex items-center gap-2">
+                        <span className="text-muted-foreground text-sm">+</span>
+                        <span className="flex items-center gap-1">
                           <span className="text-base font-semibold">
-                            {selectedStudent2.firstName} {selectedStudent2.lastName}
+                            {s.firstName} {s.lastName}
                           </span>
                           <button
-                            onClick={handleRemoveSecondStudent}
+                            onClick={() => handleRemoveStudent(s.id)}
                             className="ml-0.5 rounded-full p-0.5 hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
-                            title="Remove second student"
+                            title={`Remove ${s.firstName}`}
                           >
                             <X className="h-3.5 w-3.5" />
                           </button>
-                        </div>
-                      </>
-                    )}
+                        </span>
+                      </span>
+                    ))}
                   </div>
                   <p className="text-xs text-muted-foreground mt-0.5">
-                    {selectedStudent2
+                    {isGroup
                       ? "Group session"
                       : <>
                           {selectedStudent.goals.filter(g => g.status === "ACTIVE").length} active goal
@@ -599,43 +603,39 @@ export function LessonPlanningPage({ students }: Props) {
                   </p>
                 </div>
 
-                {/* Add second student picker */}
-                {!selectedStudent2 && (
+                {/* Add student picker — always shown when there are available students */}
+                {availableToAdd.length > 0 && (
                   <div className="relative mt-0.5">
                     <Button
                       variant="outline"
                       size="sm"
                       className="gap-1.5 h-7 text-xs border-dashed"
-                      onClick={() => setShowStudent2Picker(p => !p)}
+                      onClick={() => setShowStudentPicker(p => !p)}
                     >
                       <UserPlus className="h-3.5 w-3.5" />
                       Add student
                     </Button>
-                    {showStudent2Picker && (
+                    {showStudentPicker && (
                       <div className="absolute left-0 top-full mt-1 w-60 bg-card border rounded-lg shadow-lg z-50 overflow-hidden">
                         <div className="text-xs font-medium text-muted-foreground px-3 py-2 border-b bg-muted/30">
-                          Add second student
+                          Add student to group
                         </div>
-                        {availableForSecond.length === 0 ? (
-                          <p className="text-xs text-muted-foreground p-3 text-center">No other students on caseload.</p>
-                        ) : (
-                          <div className="max-h-52 overflow-y-auto">
-                            {availableForSecond.map(s => (
-                              <button
-                                key={s.id}
-                                onClick={() => handleAddSecondStudent(s.id)}
-                                className="w-full text-left px-3 py-2.5 text-sm hover:bg-muted/50 transition-colors border-b last:border-0"
-                              >
-                                <div className="font-medium">{s.firstName} {s.lastName}</div>
-                                <div className="text-xs text-muted-foreground">
-                                  {s.goals.filter(g => g.status === "ACTIVE").length} active goal
-                                  {s.goals.filter(g => g.status === "ACTIVE").length !== 1 ? "s" : ""}
-                                  {s.gradeLevel ? ` · ${s.gradeLevel}` : ""}
-                                </div>
-                              </button>
-                            ))}
-                          </div>
-                        )}
+                        <div className="max-h-52 overflow-y-auto">
+                          {availableToAdd.map(s => (
+                            <button
+                              key={s.id}
+                              onClick={() => handleAddStudent(s.id)}
+                              className="w-full text-left px-3 py-2.5 text-sm hover:bg-muted/50 transition-colors border-b last:border-0"
+                            >
+                              <div className="font-medium">{s.firstName} {s.lastName}</div>
+                              <div className="text-xs text-muted-foreground">
+                                {s.goals.filter(g => g.status === "ACTIVE").length} active goal
+                                {s.goals.filter(g => g.status === "ACTIVE").length !== 1 ? "s" : ""}
+                                {s.gradeLevel ? ` · ${s.gradeLevel}` : ""}
+                              </div>
+                            </button>
+                          ))}
+                        </div>
                       </div>
                     )}
                   </div>
@@ -707,8 +707,8 @@ export function LessonPlanningPage({ students }: Props) {
               </div>
             </div>
 
-            {/* ── Secondary student drop zone ── */}
-            {!selectedStudent2 && (
+            {/* ── Secondary student drop zone — shown when there are students available to add ── */}
+            {availableToAdd.length > 0 && (
               <div
                 onDragOver={(e) => { e.preventDefault(); setDragOver("secondary"); }}
                 onDragLeave={() => setDragOver(null)}
@@ -727,20 +727,17 @@ export function LessonPlanningPage({ students }: Props) {
 
             {/* ── Active goal chips ── */}
             {(selectedStudent.goals.filter(g => g.status === "ACTIVE").length > 0 ||
-              (selectedStudent2 && selectedStudent2.goals.filter(g => g.status === "ACTIVE").length > 0)) && (
+              additionalStudents.some(s => s.goals.filter(g => g.status === "ACTIVE").length > 0)) && (
               <div className="px-6 py-3 border-b shrink-0">
-                {selectedStudent2 ? (
-                  /* Two-student layout: show each student's goals in a labeled row */
+                {isGroup ? (
+                  /* Group layout: show each student's goals in a labeled row */
                   <div className="space-y-2">
-                    {[
-                      { student: selectedStudent, label: selectedStudent.firstName },
-                      { student: selectedStudent2, label: selectedStudent2.firstName },
-                    ].map(({ student, label }) => {
+                    {[selectedStudent, ...additionalStudents].map((student) => {
                       const activeGoals = student.goals.filter(g => g.status === "ACTIVE");
                       if (activeGoals.length === 0) return null;
                       return (
                         <div key={student.id} className="flex items-center gap-2 overflow-x-auto pb-0.5">
-                          <span className="text-xs font-semibold text-muted-foreground shrink-0 w-16 truncate">{label}:</span>
+                          <span className="text-xs font-semibold text-muted-foreground shrink-0 w-16 truncate">{student.firstName}:</span>
                           {activeGoals.map(goal => <GoalChip key={goal.id} goal={goal} />)}
                         </div>
                       );
@@ -767,8 +764,8 @@ export function LessonPlanningPage({ students }: Props) {
                   <div className="mb-6">
                     <h3 className="text-sm font-semibold mb-1">Plan Your Next Session</h3>
                     <p className="text-xs text-muted-foreground">
-                      {selectedStudent2
-                        ? `The AI will use ${selectedStudent.firstName} and ${selectedStudent2.firstName}'s IEP goals, recent session data, and your notes to build a shared group lesson plan.`
+                      {isGroup
+                        ? `The AI will use ${[selectedStudent, ...additionalStudents].map(s => s.firstName).join(", ")}'s IEP goals, recent session data, and your notes to build a shared group lesson plan.`
                         : `The AI will use ${selectedStudent.firstName}'s active IEP goals, recent session data, and your notes to build a ready-to-use lesson plan.`
                       }
                     </p>
