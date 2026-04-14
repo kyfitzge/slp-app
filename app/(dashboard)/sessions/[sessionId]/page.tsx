@@ -27,6 +27,14 @@ export default async function SessionDetailPage({
     .join(" ")
     .trim();
 
+  // Build per-student initial notes (for group sessions)
+  const initialNotes: Record<string, string> = {};
+  for (const note of session.notes) {
+    if (note.studentId) {
+      initialNotes[note.studentId] = note.noteText;
+    }
+  }
+
   // Build initialGoalData — last data point per goal wins (ordered asc)
   const initialGoalData: Record<
     string,
@@ -80,6 +88,7 @@ export default async function SessionDetailPage({
           })),
         }))}
         initialNote={session.notes.find((n) => !n.studentId)?.noteText ?? ""}
+        initialNotes={initialNotes}
         initialGoalData={initialGoalData}
         initialSummaryContext={initialSummaryContext}
       />

@@ -91,6 +91,8 @@ export interface SessionNotePageProps {
   location?: string | null;
   students: StudentData[];
   initialNote: string;
+  /** Per-student notes keyed by studentId — used for group sessions. */
+  initialNotes?: Record<string, string>;
   initialGoalData: Record<
     string,
     { accuracy: number; trialsCorrect?: number; trialsTotal?: number; cueingLevel?: string }
@@ -1696,6 +1698,7 @@ export function SessionNotePage({
   location,
   students,
   initialNote,
+  initialNotes,
   initialGoalData,
   initialSummaryContext = "",
 }: SessionNotePageProps) {
@@ -1737,8 +1740,24 @@ export function SessionNotePage({
   // summaryContext (voice) always takes priority over typed text.
   const [noteExtractionContext, setNoteExtractionContext] = useState(initialNote);
 
-  // ── Note draft (declared early so it's available in the `extracted` useMemo) ─
-  const [noteDraft, setNoteDraft] = useState(initialNote);
+  // ── Per-student note drafts ───────────────────────────────────────────────────
+  // For group sessions each student gets their own note saved with their studentId.
+  // For single-student sessions we keep the legacy session-wide key ("") so existing
+  // saved notes (which have no studentId) are loaded and saved the same way as before.
+  const isGroup = students.length > 1;
+  const [activeStudentId, setActiveStudentId] = useState(students[0]?.id ?? "");
+  const [studentNoteDrafts, setStudentNoteDrafts] = useState<Record<string, string>>(() => {
+    if (isGroup && initialNotes) {
+      return Object.fromEntries(students.map(s => [s.id, initialNotes[s.id] ?? ""]));
+    }
+    return { "": initialNote };
+  });
+  // Derived current note — always reads from the map for the active key
+  const noteDraft = studentNoteDrafts[isGroup ? activeStudentId : ""] ?? "";
+  function setNoteDraft(text: string) {
+    const key = isGroup ? activeStudentId : "";
+    setStudentNoteDrafts(prev => ({ ...prev, [key]: text }));
+  }
 
   // ── Location / setting override ──────────────────────────────────────────────
   // Allows editing the session setting directly from the structured data panel.
@@ -2049,10 +2068,12 @@ export function SessionNotePage({
     const cleanNote = note.replace(/\*\*([^*]+)\*\*/g, "$1");
     setNoteStatus("saving");
     try {
+      const noteBody: { noteText: string; studentId?: string } = { noteText: cleanNote };
+      if (isGroup) noteBody.studentId = activeStudentId;
       const res = await fetch(`/api/sessions/${sessionId}/notes`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ noteText: cleanNote }),
+        body: JSON.stringify(noteBody),
       });
       if (!res.ok) throw new Error();
       setNoteStatus("saved");
@@ -2264,10 +2285,12 @@ export function SessionNotePage({
     setCompleting(true);
     try {
       const finalNote = noteDraft.trim();
+      const completeBody: { noteText: string; studentId?: string } = { noteText: finalNote };
+      if (isGroup) completeBody.studentId = activeStudentId;
       const res = await fetch(`/api/sessions/${sessionId}/notes`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ noteText: finalNote }),
+        body: JSON.stringify(completeBody),
       });
       if (!res.ok) throw new Error();
       setCompleted(true);
@@ -2467,6 +2490,32 @@ export function SessionNotePage({
                   </span>
                 )}
               </div>
+
+              {/* Student tabs — only shown for group sessions */}
+              {isGroup && (
+                <div className="flex bg-muted/20 border-b">
+                  {students.map(s => {
+                    const hasNote = (studentNoteDrafts[s.id] ?? "").trim().length > 0;
+                    return (
+                      <button
+                        key={s.id}
+                        onClick={() => setActiveStudentId(s.id)}
+                        className={cn(
+                          "px-5 py-2.5 text-sm font-medium transition-colors border-b-2 flex items-center gap-1.5",
+                          activeStudentId === s.id
+                            ? "bg-card text-foreground border-primary"
+                            : "text-muted-foreground hover:text-foreground hover:bg-muted/40 border-transparent",
+                        )}
+                      >
+                        {s.firstName} {s.lastName}
+                        {hasNote && (
+                          <span className="inline-block h-1.5 w-1.5 rounded-full bg-primary/60" />
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
 
               <div className="p-5 space-y-4">
                 {/* Voice recorder + AI buttons */}
