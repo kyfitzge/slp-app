@@ -685,32 +685,38 @@ export function LessonPlanningPage({ students }: Props) {
               <div className="p-5 flex flex-col gap-4">
 
                 {/* ── Student group management ── */}
-                <div className="shrink-0 flex items-center gap-2 flex-wrap">
-                  <span className="flex items-center gap-1 rounded-full bg-muted px-2.5 py-0.5 text-xs font-medium">
-                    {selectedStudent.firstName} {selectedStudent.lastName}
-                    <button
-                      onClick={handleClearPrimary}
-                      className="ml-0.5 text-muted-foreground hover:text-foreground transition-colors"
-                      title="Remove student"
-                    >
-                      <X className="h-3 w-3" />
-                    </button>
-                  </span>
-                  {additionalStudents.map(s => (
-                    <span key={s.id} className="flex items-center gap-1">
-                      <span className="text-muted-foreground/50 text-xs">+</span>
-                      <span className="flex items-center gap-1 rounded-full bg-muted px-2.5 py-0.5 text-xs font-medium">
-                        {s.firstName} {s.lastName}
-                        <button
-                          onClick={() => handleRemoveStudent(s.id)}
-                          className="ml-0.5 text-muted-foreground hover:text-foreground transition-colors"
-                          title={`Remove ${s.firstName}`}
-                        >
-                          <X className="h-3 w-3" />
-                        </button>
-                      </span>
+                <div className="shrink-0 flex flex-col gap-2">
+
+                  {/* Selected student pills */}
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="flex items-center gap-1 rounded-full bg-muted px-2.5 py-0.5 text-xs font-medium">
+                      {selectedStudent.firstName} {selectedStudent.lastName}
+                      <button
+                        onClick={handleClearPrimary}
+                        className="ml-0.5 text-muted-foreground hover:text-foreground transition-colors"
+                        title="Remove student"
+                      >
+                        <X className="h-3 w-3" />
+                      </button>
                     </span>
-                  ))}
+                    {additionalStudents.map(s => (
+                      <span key={s.id} className="flex items-center gap-1">
+                        <span className="text-muted-foreground/50 text-xs">+</span>
+                        <span className="flex items-center gap-1 rounded-full bg-muted px-2.5 py-0.5 text-xs font-medium">
+                          {s.firstName} {s.lastName}
+                          <button
+                            onClick={() => handleRemoveStudent(s.id)}
+                            className="ml-0.5 text-muted-foreground hover:text-foreground transition-colors"
+                            title={`Remove ${s.firstName}`}
+                          >
+                            <X className="h-3 w-3" />
+                          </button>
+                        </span>
+                      </span>
+                    ))}
+                  </div>
+
+                  {/* Add / drop zone */}
                   {availableToAdd.length > 0 && (
                     <div className="relative">
                       <button
@@ -719,14 +725,14 @@ export function LessonPlanningPage({ students }: Props) {
                         onDragLeave={() => setDragOver(null)}
                         onDrop={(e) => handleDrop(e, "secondary")}
                         className={cn(
-                          "flex items-center gap-1 text-xs border border-dashed rounded-full px-2.5 py-0.5 transition-colors",
+                          "w-full flex items-center justify-center gap-2 rounded-lg border-2 border-dashed py-3 text-sm font-medium transition-colors",
                           dragOver === "secondary"
                             ? "border-primary/60 bg-primary/5 text-primary"
-                            : "text-muted-foreground border-border hover:text-foreground hover:border-foreground/30"
+                            : "border-border text-muted-foreground hover:border-primary/40 hover:bg-muted/40 hover:text-foreground"
                         )}
                       >
-                        <UserPlus className="h-3 w-3" />
-                        Add student
+                        <UserPlus className="h-4 w-4" />
+                        Add student — click to select or drag from caseload
                       </button>
                       {showStudentPicker && (
                         <div className="absolute left-0 top-full mt-1 w-60 bg-card border rounded-lg shadow-lg z-50 overflow-hidden">
