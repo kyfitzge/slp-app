@@ -417,40 +417,44 @@ function TimeGridView({
   return (
     <div className="flex flex-col h-full overflow-hidden">
 
-      {/* Sticky day headers */}
-      <div className="flex shrink-0 border-b bg-card z-10">
-        <div className="w-14 shrink-0" /> {/* gutter */}
-        {days.map(day => (
-          <div key={day.toISOString()} className="flex-1 py-2 text-center border-l">
-            <div className="text-xs text-muted-foreground">{format(day, "EEE")}</div>
-            <div className={cn(
-              "text-sm font-semibold mx-auto mt-0.5 w-7 h-7 flex items-center justify-center rounded-full",
-              isToday(day) && "bg-primary text-primary-foreground",
-            )}>
-              {format(day, "d")}
-            </div>
-          </div>
-        ))}
-      </div>
+      {/* Single scroll container — headers are sticky inside so scrollbar width
+          is shared by both headers and body, keeping columns perfectly aligned */}
+      <div className="flex-1 min-h-0 overflow-auto">
 
-      {/* Scrollable time body */}
-      <div className="flex flex-1 min-h-0 overflow-auto">
-
-        {/* Time labels — even slots + one extra label at the grid's end hour */}
-        <div className="w-14 shrink-0 border-r relative" style={{ height: GRID_H + 8 }}>
-          {[...Array.from({ length: NUM_SLOTS }, (_, i) => i).filter(i => i % 2 === 0), NUM_SLOTS].map(i => (
-            <div
-              key={i}
-              className="absolute right-2 text-xs text-muted-foreground whitespace-nowrap"
-              style={{ top: i * SLOT_PX - 7 }}
-            >
-              {fmtTimeLabel(slotToTime(i))}
+        {/* Sticky day headers */}
+        <div className="flex sticky top-0 z-10 bg-card border-b">
+          <div className="w-14 shrink-0" /> {/* gutter — matches time-label column */}
+          {days.map(day => (
+            <div key={day.toISOString()} className="flex-1 py-2 text-center border-l">
+              <div className="text-xs text-muted-foreground">{format(day, "EEE")}</div>
+              <div className={cn(
+                "text-sm font-semibold mx-auto mt-0.5 w-7 h-7 flex items-center justify-center rounded-full",
+                isToday(day) && "bg-primary text-primary-foreground",
+              )}>
+                {format(day, "d")}
+              </div>
             </div>
           ))}
         </div>
 
-        {/* Day columns — each column is the drop target; slot is calculated from mouse Y */}
-        <div className="flex flex-1">
+        {/* Time body */}
+        <div className="flex">
+
+          {/* Time labels — even slots + one extra label at the grid's end hour */}
+          <div className="w-14 shrink-0 border-r relative" style={{ height: GRID_H + 8 }}>
+            {[...Array.from({ length: NUM_SLOTS }, (_, i) => i).filter(i => i % 2 === 0), NUM_SLOTS].map(i => (
+              <div
+                key={i}
+                className="absolute right-2 text-xs text-muted-foreground whitespace-nowrap"
+                style={{ top: i * SLOT_PX - 7 }}
+              >
+                {fmtTimeLabel(slotToTime(i))}
+              </div>
+            ))}
+          </div>
+
+          {/* Day columns — each column is the drop target; slot is calculated from mouse Y */}
+          <div className="flex flex-1">
           {days.map(day => {
             const dayKey  = format(day, "yyyy-MM-dd");
             const dayAll  = sessions.filter(s => isSameDay(toLocalDate(s.sessionDate), day));
@@ -621,7 +625,9 @@ function TimeGridView({
               </div>
             );
           })}
+          </div>
         </div>
+
       </div>
     </div>
   );
