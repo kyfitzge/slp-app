@@ -10,6 +10,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { CaseloadSidePanel } from "@/components/shared/caseload-side-panel";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Select,
   SelectContent,
@@ -34,6 +35,7 @@ import {
   Save,
   ClipboardList,
   History,
+  Users,
 } from "lucide-react";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -435,34 +437,57 @@ export function LessonPlanningPage({ students }: Props) {
   }, [plans]);
 
   return (
-    <div className="flex h-full max-w-[1600px]">
-      {/* ── Left: Caseload ── */}
-      <CaseloadSidePanel
-        students={students}
-        selectedId={selectedStudentId}
-        onSelect={handleSelectStudent}
-        getStudentMeta={(id) => {
-          const count = planCountMeta[id];
-          return count ? `${count} plan${count !== 1 ? "s" : ""}` : null;
-        }}
-      />
+    <div className="flex flex-col h-full max-w-[1600px]">
+      {/* ── Page header ── */}
+      <div className="flex items-center justify-between mb-4 shrink-0">
+        <div>
+          <h1 className="text-xl font-semibold">Lesson Planning</h1>
+          <p className="text-sm text-muted-foreground mt-0.5">
+            Build AI-powered session plans from IEP goals and session data
+          </p>
+        </div>
+      </div>
 
-      {/* ── Right: Main content ── */}
-      <div className="flex-1 min-w-0 flex flex-col overflow-hidden">
-        {!selectedStudent ? (
-          /* Empty state */
-          <div className="flex-1 flex flex-col items-center justify-center gap-4 text-center p-12">
-            <div className="w-16 h-16 rounded-2xl bg-primary/10 flex items-center justify-center">
-              <BookOpen className="h-8 w-8 text-primary/60" />
+      {/* ── Grid: caseload | main ── */}
+      <div className="grid grid-cols-1 lg:grid-cols-[320px_1fr] gap-4 flex-1 min-h-0">
+
+        {/* ── LEFT: Caseload card ── */}
+        <Card className="flex flex-col min-h-0">
+          <CardHeader className="pb-3 shrink-0">
+            <CardTitle className="text-sm font-semibold flex items-center gap-2">
+              <Users className="h-4 w-4" />
+              Caseload
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="flex-1 min-h-0 overflow-hidden pt-0 flex flex-col">
+            <CaseloadSidePanel
+              students={students}
+              selectedId={selectedStudentId}
+              onSelect={handleSelectStudent}
+              getStudentMeta={(id) => {
+                const count = planCountMeta[id];
+                return count ? `${count} plan${count !== 1 ? "s" : ""}` : null;
+              }}
+            />
+          </CardContent>
+        </Card>
+
+        {/* ── RIGHT: Main content card ── */}
+        <div className="flex flex-col min-h-0 overflow-hidden rounded-xl border bg-card">
+          {!selectedStudent ? (
+            /* Empty state */
+            <div className="flex-1 flex flex-col items-center justify-center gap-4 text-center p-12">
+              <div className="w-16 h-16 rounded-2xl bg-primary/10 flex items-center justify-center">
+                <BookOpen className="h-8 w-8 text-primary/60" />
+              </div>
+              <div>
+                <p className="text-sm font-medium text-muted-foreground mb-1">Select a student to start planning</p>
+                <p className="text-xs text-muted-foreground max-w-xs">
+                  Choose a student from the caseload to create AI-powered lesson plans based on their IEP goals and session data.
+                </p>
+              </div>
             </div>
-            <div>
-              <h2 className="text-lg font-semibold text-foreground mb-1">Lesson Planning</h2>
-              <p className="text-sm text-muted-foreground max-w-sm">
-                Select a student from your caseload to create AI-powered lesson plans based on their IEP goals and session data.
-              </p>
-            </div>
-          </div>
-        ) : (
+          ) : (
           <div className="flex-1 min-h-0 flex flex-col overflow-hidden">
 
             {/* ── Header ── */}
@@ -722,6 +747,7 @@ export function LessonPlanningPage({ students }: Props) {
             </div>
           </div>
         )}
+        </div>
       </div>
     </div>
   );
