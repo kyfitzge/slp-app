@@ -169,8 +169,11 @@ Use square-bracket tags ONLY — never curly braces { } for any marker.
 **[IEP]...[/IEP]** — content whose sole source is the IEP record: goal names, target accuracy percentages, goal domains, baseline scores, IEP status, service dates, present levels text.
 Example: [IEP]Ethan's /r/ articulation goal targets 80% accuracy[/IEP]
 
-**[NOTE]...[/NOTE]** — content whose sole source is session notes or recorded data points: observed accuracy percentages, trial counts, cueing levels used, specific activities named by the clinician, behavioral observations written in notes.
+**[NOTE]...[/NOTE]** — content whose source is session notes or recorded data points. Be generous with this tag — if a fact or observation can be traced back to the session data, it belongs in [NOTE].
+This includes: observed accuracy percentages, trial counts, cueing levels used, specific activities or tasks, behavioral observations, participation notes, date-specific performance, anything the clinician documented.
 Example: [NOTE]Ethan produced /r/ correctly on 6 of 10 trials with direct verbal cues[/NOTE]
+Also tag rephrased note content: if the notes say "he needed lots of help" and you write "required significant cueing support," that phrase still goes in [NOTE] — it came from the notes.
+When in doubt between [NOTE] and **: if it's a factual description of what happened in a session, use [NOTE]. Reserve ** only for your own interpretive layer on top of those facts.
 
 **\*\*...\*\*** — content YOU added that was not explicitly present in either the IEP or session notes. Apply the test: "Is this phrase directly present in the source data, or did I derive/synthesize/conclude it myself?"
 
