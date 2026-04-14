@@ -422,7 +422,7 @@ function TimeGridView({
       <div className="flex-1 min-h-0 overflow-auto">
 
         {/* Sticky day headers */}
-        <div className="flex sticky top-0 z-10 bg-card border-b">
+        <div className="flex sticky top-0 z-30 bg-card border-b shadow-sm">
           <div className="w-14 shrink-0" /> {/* gutter — matches time-label column */}
           {days.map(day => (
             <div key={day.toISOString()} className="flex-1 py-2 text-center border-l">
