@@ -640,12 +640,18 @@ export function ProgressReportsPage({ initialReports, students }: Props) {
                       >
                         Finalize
                       </Button>
-                      {editor.reportId && editor.isDraft && (
+                      {(editor.reportId || editor.text.trim()) && (
                         <Button
                           size="sm"
                           variant="ghost"
-                          onClick={() => handleDelete(editor.reportId!)}
-                          className="gap-1.5 h-8 text-xs text-destructive hover:text-destructive hover:bg-destructive/10 ml-auto"
+                          onClick={() => {
+                            if (editor.reportId) {
+                              handleDelete(editor.reportId);
+                            } else {
+                              resetEditor();
+                            }
+                          }}
+                          className="gap-1.5 h-8 text-xs text-destructive hover:text-destructive hover:bg-destructive/10"
                         >
                           <Trash2 className="h-3.5 w-3.5" />
                           Delete draft
