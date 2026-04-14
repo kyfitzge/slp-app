@@ -2,16 +2,19 @@
  * POST /api/progress-reports/chat
  *
  * AI chat assistant for progress report authoring.
- * Guides the SLP from the very start — collecting the report title, date range,
- * and clinical notes — through to a finished draft.
+ * Fetches full session notes, goal data points, and IEP details from the DB
+ * so the assistant has complete clinical context to answer questions and
+ * draft content intelligently.
  *
- * Supports two structured output blocks in addition to plain conversational replies:
+ * Structured output protocols (in addition to plain conversation):
  *   REPORT_UPDATE: <full report text>
  *   FIELD_UPDATE: <JSON: { title?, startDate?, endDate? }>
  */
 
 import { NextRequest, NextResponse } from "next/server";
 import { requireUser } from "@/lib/auth/get-user";
+import { getSessionsForReport } from "@/lib/queries/sessions";
+import { getIEPsByStudentId } from "@/lib/queries/ieps";
 import Anthropic from "@anthropic-ai/sdk";
 
 interface ChatMessage {
@@ -20,15 +23,13 @@ interface ChatMessage {
 }
 
 interface ReportContext {
+  studentId: string;
   studentName: string;
   gradeLevel?: string | null;
   schoolName?: string | null;
-  /** Empty string when not yet set */
   title: string;
-  /** "yyyy-MM-dd" or empty string */
-  startDate: string;
-  /** "yyyy-MM-dd" or empty string */
-  endDate: string;
+  startDate: string;   // "yyyy-MM-dd" or ""
+  endDate: string;     // "yyyy-MM-dd" or ""
   currentDraft: string;
   goals: Array<{ name: string; domain: string; targetAccuracy: number; status: string }>;
   sessionCount: number;
@@ -39,90 +40,169 @@ interface ChatBody {
   context: ReportContext;
 }
 
-function buildSystemPrompt(ctx: ReportContext): string {
-  const goalLines = ctx.goals.length > 0
-    ? ctx.goals.map(g =>
-        `• ${g.name} (${g.domain}) — target ${Math.round(g.targetAccuracy * 100)}%, status: ${g.status}`
-      ).join("\n")
-    : "No goals on file.";
+const CUEING_LABELS: Record<string, string> = {
+  INDEPENDENT:      "independent",
+  GESTURAL:         "gestural cues",
+  INDIRECT_VERBAL:  "indirect verbal cues",
+  DIRECT_VERBAL:    "direct verbal cues",
+  MODELING:         "modeling",
+  PHYSICAL:         "physical guidance",
+  MAXIMUM_ASSISTANCE: "maximum support",
+};
 
-  const titleStatus   = ctx.title     ? `"${ctx.title}"`     : "NOT SET";
-  const startStatus   = ctx.startDate ? ctx.startDate         : "NOT SET";
-  const endStatus     = ctx.endDate   ? ctx.endDate           : "NOT SET";
-  const draftStatus   = ctx.currentDraft.trim()
-    ? `CURRENT DRAFT:\n"""\n${ctx.currentDraft.trim()}\n"""`
+function buildSystemPrompt(
+  ctx: ReportContext,
+  sessionData: Awaited<ReturnType<typeof getSessionsForReport>>,
+  ieps: Awaited<ReturnType<typeof getIEPsByStudentId>>,
+): string {
+  const { student, sessions } = sessionData;
+  const firstName = ctx.studentName.split(" ")[0];
+
+  // ── Setup status ──────────────────────────────────────────────────────────
+  const titleStatus     = ctx.title     ? `"${ctx.title}"`   : "NOT SET";
+  const startStatus     = ctx.startDate ? ctx.startDate       : "NOT SET";
+  const endStatus       = ctx.endDate   ? ctx.endDate         : "NOT SET";
+  const setupComplete   = !!(ctx.title && ctx.startDate && ctx.endDate);
+
+  // ── IEP section ───────────────────────────────────────────────────────────
+  const activeIep = ieps.find(i => i.status === "ACTIVE") ?? ieps[0];
+  const iepSection = activeIep ? [
+    `IEP status: ${activeIep.status}`,
+    `Effective: ${activeIep.effectiveDate.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}`,
+    `Review date: ${activeIep.reviewDate.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}`,
+    activeIep.minutesPerWeek ? `Service: ${activeIep.minutesPerWeek} min/week` : "",
+    activeIep.presentLevels ? `\nPresent levels: ${activeIep.presentLevels}` : "",
+  ].filter(Boolean).join(" | ") : "No IEP on file.";
+
+  // ── Goals with data points ────────────────────────────────────────────────
+  const goals = student?.goals ?? [];
+  const goalsSection = goals.length === 0
+    ? "No goals on file."
+    : goals.map(g => {
+        const name = g.shortName ?? g.goalText.slice(0, 80);
+        const target = Math.round(g.targetAccuracy * 100);
+        const baseline = g.baselineScore != null ? ` | Baseline: ${Math.round(g.baselineScore * 100)}%` : "";
+        const mastered = g.masteryDate ? ` | Mastered: ${new Date(g.masteryDate).toLocaleDateString("en-US", { month: "short", year: "numeric" })}` : "";
+        const dpLines = g.dataPoints.length === 0
+          ? "    No data collected in this period."
+          : g.dataPoints.map(dp => {
+              const date = new Date(dp.collectedAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+              const pct  = Math.round(dp.accuracy * 100);
+              const cue  = dp.cueingLevel ? `, ${CUEING_LABELS[dp.cueingLevel] ?? dp.cueingLevel}` : "";
+              const trials = dp.trialsCorrect != null && dp.trialsTotal != null
+                ? `, ${dp.trialsCorrect}/${dp.trialsTotal} trials` : "";
+              return `    • ${date}: ${pct}%${trials}${cue}`;
+            }).join("\n");
+
+        return [
+          `Goal: ${name}`,
+          `  Domain: ${g.domain} | Target: ${target}%${baseline} | Status: ${g.status}${mastered}`,
+          `  Full text: ${g.goalText}`,
+          `  Data points (${g.dataPoints.length} in period):`,
+          dpLines,
+        ].join("\n");
+      }).join("\n\n");
+
+  // ── Session notes ─────────────────────────────────────────────────────────
+  const sessionsSection = sessions.length === 0
+    ? "No sessions found in this period."
+    : sessions.map(s => {
+        const date = new Date(s.sessionDate).toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric", year: "numeric" });
+        const type = s.sessionType.replace(/_/g, " ");
+        const dur  = s.durationMins ? `, ${s.durationMins} min` : "";
+        const att  = s.sessionStudents[0]?.attendance ?? "unknown";
+        const noteText = s.notes.map(n => n.noteText).filter(Boolean).join(" ").trim();
+        const notes = noteText ? `\n  Notes: ${noteText}` : "\n  Notes: (none)";
+
+        const dpSummary = s.dataPoints.length > 0
+          ? "\n  Data: " + s.dataPoints.map(dp => {
+              const goalName = dp.goal.shortName ?? dp.goal.goalText.slice(0, 40);
+              const pct = Math.round(dp.accuracy * 100);
+              const cue = dp.cueingLevel ? ` (${CUEING_LABELS[dp.cueingLevel] ?? dp.cueingLevel})` : "";
+              const trials = dp.trialsCorrect != null && dp.trialsTotal != null
+                ? ` ${dp.trialsCorrect}/${dp.trialsTotal}` : "";
+              return `${goalName}: ${pct}%${trials}${cue}`;
+            }).join("; ")
+          : "";
+
+        return `[${date}] ${type}${dur} | Attendance: ${att}${notes}${dpSummary}`;
+      }).join("\n\n");
+
+  // ── Draft section ─────────────────────────────────────────────────────────
+  const draftSection = ctx.currentDraft.trim()
+    ? `CURRENT REPORT DRAFT:\n"""\n${ctx.currentDraft.trim()}\n"""`
     : "No draft written yet.";
 
-  const setupComplete = !!(ctx.title && ctx.startDate && ctx.endDate);
-
-  return `You are an experienced school-based Speech-Language Pathologist helping to author a formal progress report for a student on the SLP's caseload. You guide the SLP from the very beginning — collecting the report details and clinical observations — through to a finished, polished draft ready to send to parents or the IEP team.
+  return `You are an experienced school-based Speech-Language Pathologist helping to author a formal progress report. You have full access to the student's clinical data below — use it to answer questions accurately and draft clinically grounded content.
 
 ═══ STUDENT ═══
 Name: ${ctx.studentName}${ctx.gradeLevel ? ` | Grade: ${ctx.gradeLevel}` : ""}${ctx.schoolName ? ` | School: ${ctx.schoolName}` : ""}
 
 ═══ REPORT SETUP STATUS ═══
-Title:       ${titleStatus}
-Start date:  ${startStatus}
-End date:    ${endStatus}
-Sessions loaded: ${ctx.sessionCount}
+Title:      ${titleStatus}
+Start date: ${startStatus}
+End date:   ${endStatus}
+Sessions in period: ${sessions.length}
 
-═══ IEP GOALS ═══
-${goalLines}
+═══ ACTIVE IEP ═══
+${iepSection}
 
-═══ ${draftStatus} ═══
+═══ IEP GOALS & PERFORMANCE DATA ═══
+${goalsSection}
+
+═══ SESSION NOTES (${sessions.length} sessions) ═══
+${sessionsSection}
+
+═══ ${draftSection} ═══
 
 ═══ YOUR WORKFLOW ═══
 ${setupComplete ? `
-Report setup is complete. Focus on helping the SLP build or refine the draft.
+Report setup is complete. Use the clinical data above to help the SLP build or refine the draft.
+When the SLP asks about the student's performance, answer directly from the session notes and data points above — cite specific dates, percentages, and cueing levels.
 ` : `
-The report has not been fully set up yet (title or date range is missing).
-YOUR FIRST PRIORITY is to collect any missing setup information — ask for it directly, one item at a time:
-  1. Report title (e.g. "Q1 2026", "Fall Semester 2025–2026", "Annual Progress")
-  2. Reporting period start date (ask in plain English — e.g. "What date does this reporting period start?")
+The report has not been fully set up yet. YOUR FIRST PRIORITY is to collect any missing setup info — ask one item at a time:
+  1. Report title (e.g. "Q1 2026", "Fall Semester", "Annual Progress")
+  2. Reporting period start date
   3. Reporting period end date
-
-Once you have all three, confirm them and move on to collecting clinical information to write the report.
+Once you have all three, confirm and move on to building the report.
 `}
 
-After setup is complete, help the SLP with any of:
-— Drafting the full report from clinical notes they share
+You can help the SLP with any of:
+— Answering questions about ${firstName}'s performance using the session data above
+— Drafting the full report from the clinical data and/or additional notes the SLP shares
 — Refining or improving existing sections
-— Adjusting tone or clarity (e.g. "make this more parent-friendly")
+— Adjusting tone (e.g. "make this more parent-friendly")
 — Suggesting stronger clinical language
 — Reviewing a draft for completeness and accuracy
 
-═══ WRITING RULES (when producing report text) ═══
+═══ WRITING RULES (for report text) ═══
 — Write in the SLP's voice, addressed to the reader (parent/administrator/IEP team)
-— Third person for the student (use first name or "the student")
+— Third person: use "${firstName}" or "the student"
 — Past tense, professional, parent-readable prose
 — No headers, bullets, or markdown in report text — flowing paragraphs only
-— Base all clinical claims strictly on what the SLP tells you — never fabricate data
+— Base all claims on the data provided — never fabricate numbers or observations
 
 ═══ OUTPUT PROTOCOLS ═══
 
-FIELD_UPDATE protocol — use this when the SLP gives you the title or dates:
+FIELD_UPDATE — when you learn the title or dates:
 Output a line starting with EXACTLY:
 FIELD_UPDATE:
-followed immediately by a single JSON object with any combination of: title, startDate (yyyy-MM-dd), endDate (yyyy-MM-dd).
-Example:
-FIELD_UPDATE:
-{"title":"Q1 2026","startDate":"2026-01-01","endDate":"2026-03-31"}
+then a single JSON object, e.g.: {"title":"Q1 2026","startDate":"2026-01-01","endDate":"2026-03-31"}
 
-REPORT_UPDATE protocol — use this when you produce a full or substantially revised draft:
+REPORT_UPDATE — when you produce a full or substantially revised draft:
 Output a line starting with EXACTLY:
 REPORT_UPDATE:
-followed immediately by the full clean report text (no markers, no JSON, no commentary).
+then the full clean report text (no markers, no JSON, no commentary).
 
 Rules:
-— You may output FIELD_UPDATE and REPORT_UPDATE in the same response if both apply
-— Always output a plain conversational reply as well — do not output ONLY a protocol block with no message
+— Always output a conversational reply as well — never output only a protocol block
 — Keep conversational replies short: 1–3 sentences, no markdown bold/italic, no bullet points
-— Never output ** or __ formatting in your conversational message — plain text only`;
+— Never use ** or __ formatting in conversational replies — plain text only`;
 }
 
 export async function POST(req: NextRequest) {
   try {
-    await requireUser();
+    const user = await requireUser();
 
     const apiKey = process.env.ANTHROPIC_API_KEY;
     if (!apiKey) {
@@ -132,9 +212,26 @@ export async function POST(req: NextRequest) {
     const body: ChatBody = await req.json();
     const { messages, context } = body;
 
-    if (!context) {
-      return NextResponse.json({ error: "Missing report context" }, { status: 400 });
+    if (!context?.studentId) {
+      return NextResponse.json({ error: "Missing studentId in context" }, { status: 400 });
     }
+
+    // Fetch clinical data — use the date range if provided, else the current month as a fallback
+    const startDate = context.startDate
+      ? new Date(context.startDate + "T00:00:00")
+      : new Date(new Date().getFullYear(), new Date().getMonth(), 1);
+    const endDate = context.endDate
+      ? new Date(context.endDate + "T23:59:59")
+      : new Date();
+
+    const [sessionData, ieps] = await Promise.all([
+      getSessionsForReport(user!.id, {
+        studentId: context.studentId,
+        startDate,
+        endDate,
+      }),
+      getIEPsByStudentId(context.studentId),
+    ]);
 
     const client = new Anthropic({ apiKey });
 
@@ -149,7 +246,7 @@ export async function POST(req: NextRequest) {
     const response = await client.messages.create({
       model: process.env.LLM_NOTE_MODEL ?? "claude-haiku-4-5",
       max_tokens: 2000,
-      system: buildSystemPrompt(context),
+      system: buildSystemPrompt(context, sessionData, ieps),
       messages: anthropicMessages,
     });
 
@@ -164,14 +261,13 @@ export async function POST(req: NextRequest) {
 
     if (fieldIdx !== -1) {
       const afterMarker = fullText.slice(fieldIdx + fieldMarker.length).trim();
-      // JSON ends at the first newline after the closing brace
       const jsonEnd = afterMarker.indexOf("\n", afterMarker.indexOf("}"));
       const jsonStr = jsonEnd !== -1 ? afterMarker.slice(0, jsonEnd + 1) : afterMarker.split("\n")[0];
-      try {
-        fieldUpdate = JSON.parse(jsonStr.trim());
-      } catch { /* ignore malformed JSON */ }
-      // Remove FIELD_UPDATE block from text before looking for REPORT_UPDATE
-      textAfterField = (fullText.slice(0, fieldIdx) + "\n" + fullText.slice(fieldIdx + fieldMarker.length + (jsonEnd !== -1 ? jsonEnd + 1 : jsonStr.length))).trim();
+      try { fieldUpdate = JSON.parse(jsonStr.trim()); } catch { /* ignore */ }
+      textAfterField = (
+        fullText.slice(0, fieldIdx) + "\n" +
+        fullText.slice(fieldIdx + fieldMarker.length + (jsonEnd !== -1 ? jsonEnd + 1 : jsonStr.length))
+      ).trim();
     }
 
     // Parse REPORT_UPDATE block

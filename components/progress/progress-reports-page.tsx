@@ -126,6 +126,7 @@ interface ChatMessage {
 }
 
 interface ReportChatContext {
+  studentId: string;
   studentName: string;
   gradeLevel?: string | null;
   schoolName?: string | null;
@@ -1114,6 +1115,7 @@ export function ProgressReportsPage({ initialReports, students }: Props) {
           <div className="flex flex-col min-h-0">
             <ReportChatPanel
               context={{
+                studentId: selectedStudent.id,
                 studentName: `${selectedStudent.firstName} ${selectedStudent.lastName}`,
                 gradeLevel: selectedStudent.gradeLevel,
                 schoolName: selectedStudent.schoolName,
