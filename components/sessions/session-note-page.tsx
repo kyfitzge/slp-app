@@ -269,6 +269,30 @@ function getDocStatus(noteDraft: string, completed: boolean): DocStatus {
   return "needs_note";
 }
 
+/**
+ * Parse a NOTE_UPDATE string that uses "[Student Name]: ..." per-student markers
+ * (produced by the group-session AI interview) into a map of studentName → text.
+ * Returns an empty map if no markers are found.
+ */
+function parseStudentSections(
+  summary: string,
+  studentNames: string[],
+): Record<string, string> {
+  if (studentNames.length === 0) return {};
+  const escaped = studentNames.map((n) => n.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"));
+  const boundary = escaped.join("|");
+  const result: Record<string, string> = {};
+  for (let i = 0; i < studentNames.length; i++) {
+    const regex = new RegExp(
+      `\\[${escaped[i]}\\]:\\s*([\\s\\S]*?)(?=\\[(?:${boundary})\\]:|$)`,
+      "i",
+    );
+    const match = summary.match(regex);
+    if (match?.[1]?.trim()) result[studentNames[i]] = match[1].trim();
+  }
+  return result;
+}
+
 // ─── Doc status badge ─────────────────────────────────────────────────────────
 
 function DocStatusBadge({ status }: { status: DocStatus }) {
@@ -2006,37 +2030,90 @@ export function SessionNotePage({
   const [editingInferenceValue, setEditingInferenceValue] = useState("");
   const editingSpanRef = useRef<HTMLSpanElement>(null);
 
+  /** Build the goals payload for a single generate-note call. */
+  function buildGoalsForNote(context: string, goals: Goal[]): {
+    name: string; accuracy: number | null; trialsCorrect: number | null;
+    trialsTotal: number | null; cueingLevel: string | null;
+  }[] {
+    return goals.map((goal) => {
+      const mg: MatchedGoalData = {
+        goal,
+        extracted: extractDataForGoal(context, goal),
+        saved: initialGoalData[goal.id],
+      };
+      const aiExt  = aiExtractions[goal.id];
+      const ovride = goalOverrides[goal.id];
+      const acc    = goalEffectiveAccuracy(mg, aiExt, ovride);
+      const trials = goalEffectiveTrials(mg, aiExt, ovride);
+      const cueing = goalEffectiveCueing(mg, aiExt, ovride);
+      const [tc, tt] = trials ? trials.split("/").map(Number) : [null, null];
+      return {
+        name: goal.shortName ?? goal.goalText.slice(0, 60),
+        accuracy: acc,
+        trialsCorrect: tc ?? null,
+        trialsTotal: tt ?? null,
+        cueingLevel: cueing,
+      };
+    });
+  }
+
   async function generateNote(contextOverride?: string) {
     setGenerating(true);
     try {
       const context = contextOverride ?? summaryContext;
 
-      // Build per-goal data for the LLM prompt
+      // ── GROUP SESSION: one note per student, routed to the correct tab ───────
+      if (isGroup) {
+        const studentNames = students.map((s) => `${s.firstName} ${s.lastName}`);
+        // Parse [StudentName]: sections from the AI interview summary
+        const sections = parseStudentSections(context, studentNames);
+
+        const results = await Promise.all(
+          students.map(async (s) => {
+            const name = `${s.firstName} ${s.lastName}`;
+            // Fall back to full context if no per-student section was parsed
+            const studentCtx = sections[name] ?? context;
+            const res = await fetch(`/api/sessions/${sessionId}/generate-note`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                summaryText: studentCtx,
+                goals: buildGoalsForNote(studentCtx, s.goals),
+                attendance: [{ name, status: attendance[s.id] ?? s.attendance }],
+                sessionDate: format(new Date(sessionDate), "MMM d, yyyy"),
+                sessionType: SESSION_TYPE_LABELS[sessionType] ?? sessionType,
+                durationMins,
+              }),
+            });
+            const json = await res.json();
+            if (!res.ok) throw new Error(json.error ?? "Generation failed");
+            return { studentId: s.id, draft: json.draftNote as string };
+          }),
+        );
+
+        // Write every student's note to the correct tab slot
+        const newDrafts = { ...studentNoteDrafts };
+        for (const { studentId, draft } of results) {
+          newDrafts[studentId] = draft;
+        }
+        setStudentNoteDrafts(newDrafts);
+
+        // Drive UI state off the active student's draft
+        const activeDraft = newDrafts[activeStudentId] ?? "";
+        const cleanActive = activeDraft.replace(/\*\*([^*]+)\*\*/g, "$1");
+        setNoteExtractionContext(cleanActive);
+        setGeneratedAt(new Date());
+        setHasUnsavedChanges(true);
+        setNotePreviewMode(Object.values(newDrafts).some((d) => /\*\*[^*]+\*\*/.test(d)));
+        toast.success("Notes generated for all students");
+        extractStructuredData(cleanActive);
+        return;
+      }
+
+      // ── SINGLE STUDENT: original path ────────────────────────────────────────
       const currentGoals = context.trim()
         ? matchGoalsFromTranscript(context, allGoals)
         : allGoals.filter((g) => !!initialGoalData[g.id]);
-
-      const currentMatchedGoals: MatchedGoalData[] = currentGoals.map((goal) => ({
-        goal,
-        extracted: extractDataForGoal(context, goal),
-        saved: initialGoalData[goal.id],
-      }));
-
-      const goalsForNote = currentMatchedGoals.map((mg) => {
-        const aiExt  = aiExtractions[mg.goal.id];
-        const ovride = goalOverrides[mg.goal.id];
-        const acc    = goalEffectiveAccuracy(mg, aiExt, ovride);
-        const trials = goalEffectiveTrials(mg,   aiExt, ovride);
-        const cueing = goalEffectiveCueing(mg,   aiExt, ovride);
-        const [tc, tt] = trials ? trials.split("/").map(Number) : [null, null];
-        return {
-          name: mg.goal.shortName ?? mg.goal.goalText.slice(0, 60),
-          accuracy: acc,
-          trialsCorrect: tc ?? null,
-          trialsTotal:   tt ?? null,
-          cueingLevel:   cueing,
-        };
-      });
 
       const attendanceList = students.map((s) => ({
         name: `${s.firstName} ${s.lastName}`,
@@ -2048,7 +2125,7 @@ export function SessionNotePage({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           summaryText: context.trim(),
-          goals: goalsForNote,
+          goals: buildGoalsForNote(context, currentGoals),
           attendance: attendanceList,
           sessionDate: format(new Date(sessionDate), "MMM d, yyyy"),
           sessionType: SESSION_TYPE_LABELS[sessionType] ?? sessionType,
@@ -2059,15 +2136,12 @@ export function SessionNotePage({
       if (!res.ok) throw new Error(json.error ?? "Generation failed");
       const draft: string = json.draftNote;
       setNoteDraft(draft);
-      // Use marker-stripped text for extraction so ** doesn't confuse the parsers
       const cleanDraft = draft.replace(/\*\*([^*]+)\*\*/g, "$1");
       setNoteExtractionContext(cleanDraft);
       setGeneratedAt(new Date());
       setHasUnsavedChanges(true);
-      // Enter preview mode if the AI marked any inferred content
       setNotePreviewMode(/\*\*[^*]+\*\*/.test(draft));
       toast.success("Note generated");
-      // Extract structured data from the generated clinical note
       extractStructuredData(cleanDraft);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Failed to generate note");
