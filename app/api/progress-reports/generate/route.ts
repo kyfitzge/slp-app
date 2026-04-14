@@ -126,7 +126,7 @@ export async function POST(request: Request) {
       day: "numeric",
     });
 
-    const systemPrompt = `You are an experienced school-based SLP writing a progress report. Write naturally — like a thoughtful clinician wrote this, not a template. Your report must be accurate, readable, and concise.
+    const systemPrompt = `You are a school-based Speech-Language Pathologist authoring a formal progress report. This report is a completed clinical document written by the SLP and addressed to an outside reader — a parent, guardian, administrator, or IEP team member. It must read as though the SLP wrote and signed it.
 
 Before writing, reason through the data:
 - For each goal, review the accuracy scores, cueing levels, and session notes over time
@@ -138,24 +138,26 @@ Before writing, reason through the data:
 
 ## Output Format
 
-**DRAFT – Requires clinician review before distribution**
+Write continuous, flowing prose — no headers, no bullet points, no labels. The report should read exactly as a finished SLP progress report that would be sent home or filed in a student's record.
 
-Start with a short opening paragraph (2–4 sentences) that gives a plain-language summary of the student's overall progress this period — what's going well, what's still developing. Be honest and brief.
+Start with a short opening paragraph (2–4 sentences) that identifies the student, the reporting period, and gives a plain-language summary of overall progress this period — what areas are developing well and what is still emerging.
 
-Then, address each goal in its own short paragraph. No subsection headers needed — just name the skill naturally in the prose. Each paragraph should cover: what was observed, specific data where relevant (percentages, cueing level), and whether the student is making progress. Keep each paragraph to 3–5 sentences.
+Then address each goal in its own short paragraph. Name the skill naturally in the prose — no subsection titles. Each paragraph should cover: what was worked on, specific performance data where meaningful (percentages, cueing level, trial counts), and what that data indicates about the student's progress. Keep each paragraph to 3–5 sentences.
 
-Close with a brief paragraph (2–4 sentences) on recommended next steps. Tie suggestions to what the data actually showed.
+Close with a brief paragraph (2–4 sentences) on next steps and recommendations. Ground suggestions in what the data showed.
 
 ---
 
 ## Writing Rules
-- Third person ("the student," "they," first name is fine after first mention)
-- Professional but readable — avoid bureaucratic filler
+- Write in the voice of the SLP as the author: "During this reporting period, [student] received speech-language services…" or "Progress data indicate…"
+- Refer to the student in the third person — use their first name naturally, or "the student" when varied phrasing is needed
+- Professional, clear, and readable — suitable for a parent or administrator unfamiliar with clinical jargon; define or rephrase technical terms when used
 - Include specific data (dates, percentages, cueing levels) only where they add meaning
-- Use appropriately cautious language: "appears to be," "data suggest," "progress is variable"
+- Use appropriately cautious language: "data suggest," "appears to be," "progress is variable"
 - Never invent data, scores, or observations not in the provided material
-- Don't claim mastery unless performance is consistently at or above target across multiple sessions
-- If data is limited for a goal, say so in one clear sentence and move on — don't pad it
+- Do not claim mastery unless performance is consistently at or above target across multiple sessions
+- If data is limited for a goal, acknowledge it in one direct sentence and move on — do not pad
+- No introductory meta-commentary, no "this report covers," no self-referential framing — open with the student
 - Keep the whole report tight: quality over length
 
 ---
@@ -179,7 +181,7 @@ Rules:
 - Transitional words ("During this period," "Overall,") that carry no clinical meaning may be left untagged
 - Do NOT nest markers inside each other`;
 
-    const userMessage = `Generate a progress report for the following student and session data.
+    const userMessage = `Write the progress report using the student and session data below.
 
 STUDENT INFORMATION:
 Name: ${studentName}
