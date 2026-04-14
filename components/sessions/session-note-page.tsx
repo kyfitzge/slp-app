@@ -746,6 +746,8 @@ function AiChatPanel({
   const [pendingNoteUpdate, setPendingNoteUpdate] = useState<string | null>(null);
   const [statusMsg, setStatusMsg] = useState<string | null>(null);
   const [ttsAvailable, setTtsAvailable] = useState(true);
+  const [audioLevel, setAudioLevel] = useState(0);       // 0–1, for live ring
+  const [silenceProgress, setSilenceProgress] = useState(0); // 0–1, countdown
 
   const initRef = useRef(false);
   const bottomRef = useRef<HTMLDivElement>(null);
@@ -754,6 +756,18 @@ function AiChatPanel({
   const streamRef = useRef<MediaStream | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const autoRecordRef = useRef(false);
+
+  // VAD refs
+  const audioCtxRef    = useRef<AudioContext | null>(null);
+  const analyserRef    = useRef<AnalyserNode | null>(null);
+  const rafRef         = useRef<number | null>(null);
+  const silenceStartRef = useRef<number | null>(null);
+  const recordStartRef  = useRef<number>(0);
+
+  // VAD constants
+  const SILENCE_THRESHOLD  = 0.015; // RMS below this = silence
+  const SILENCE_DURATION   = 1800;  // ms of silence before auto-stop
+  const MIN_RECORD_MS      = 700;   // don't auto-stop within first 700 ms
 
   useEffect(() => {
     if (messages.length > 0) {
@@ -775,6 +789,8 @@ function AiChatPanel({
     return () => {
       streamRef.current?.getTracks().forEach((t) => t.stop());
       audioRef.current?.pause();
+      if (rafRef.current != null) cancelAnimationFrame(rafRef.current);
+      audioCtxRef.current?.close().catch(() => {});
     };
   }, []);
 
@@ -844,13 +860,27 @@ function AiChatPanel({
     startRecording();
   }
 
+  // ── VAD helpers ─────────────────────────────────────────────────────────────
+  function stopVAD() {
+    if (rafRef.current != null) { cancelAnimationFrame(rafRef.current); rafRef.current = null; }
+    audioCtxRef.current?.close().catch(() => {});
+    audioCtxRef.current = null;
+    analyserRef.current = null;
+    silenceStartRef.current = null;
+    setAudioLevel(0);
+    setSilenceProgress(0);
+  }
+
   // ── Recording ───────────────────────────────────────────────────────────────
   async function startRecording() {
     setStatusMsg(null);
+    setAudioLevel(0);
+    setSilenceProgress(0);
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       streamRef.current = stream;
       chunksRef.current = [];
+      recordStartRef.current = Date.now();
 
       const mimeType = MediaRecorder.isTypeSupported("audio/webm;codecs=opus")
         ? "audio/webm;codecs=opus"
@@ -866,6 +896,7 @@ function AiChatPanel({
       };
 
       recorder.onstop = async () => {
+        stopVAD();
         stream.getTracks().forEach((t) => t.stop());
         streamRef.current = null;
         const blob = new Blob(chunksRef.current, { type: mimeType || "audio/webm" });
@@ -874,6 +905,58 @@ function AiChatPanel({
 
       recorder.start(250);
       setVoiceState("recording");
+
+      // ── Wire up VAD ──
+      const ctx = new AudioContext();
+      audioCtxRef.current = ctx;
+      const source = ctx.createMediaStreamSource(stream);
+      const analyser = ctx.createAnalyser();
+      analyser.fftSize = 1024;
+      analyser.smoothingTimeConstant = 0.3;
+      source.connect(analyser);
+      analyserRef.current = analyser;
+
+      const dataArray = new Uint8Array(analyser.fftSize);
+
+      function poll() {
+        if (!analyserRef.current || mediaRecorderRef.current?.state !== "recording") return;
+        analyserRef.current.getByteTimeDomainData(dataArray);
+
+        // Calculate RMS amplitude (0–1)
+        let sum = 0;
+        for (let i = 0; i < dataArray.length; i++) {
+          const norm = (dataArray[i] - 128) / 128;
+          sum += norm * norm;
+        }
+        const rms = Math.sqrt(sum / dataArray.length);
+        setAudioLevel(Math.min(1, rms * 6)); // amplify for display
+
+        const now = Date.now();
+        const elapsed = now - recordStartRef.current;
+
+        if (rms > SILENCE_THRESHOLD) {
+          // Speech detected — reset silence window
+          silenceStartRef.current = null;
+          setSilenceProgress(0);
+        } else if (elapsed > MIN_RECORD_MS) {
+          // Silence — start or continue countdown
+          if (silenceStartRef.current == null) silenceStartRef.current = now;
+          const silenceElapsed = now - silenceStartRef.current;
+          setSilenceProgress(Math.min(1, silenceElapsed / SILENCE_DURATION));
+          if (silenceElapsed >= SILENCE_DURATION) {
+            // Auto-stop
+            if (mediaRecorderRef.current?.state === "recording") {
+              mediaRecorderRef.current.stop();
+              setVoiceState("transcribing");
+            }
+            return; // stop polling
+          }
+        }
+
+        rafRef.current = requestAnimationFrame(poll);
+      }
+
+      rafRef.current = requestAnimationFrame(poll);
     } catch {
       setStatusMsg("Microphone access denied. Use the text box below.");
       setVoiceState("idle");
@@ -881,6 +964,7 @@ function AiChatPanel({
   }
 
   function stopRecording() {
+    stopVAD();
     if (mediaRecorderRef.current?.state === "recording") {
       mediaRecorderRef.current.stop();
       setVoiceState("transcribing");
@@ -974,13 +1058,13 @@ function AiChatPanel({
   const isProcessing = voiceState === "transcribing" || voiceState === "ai_thinking";
   const isSpeaking = voiceState === "speaking";
 
-  const micLabel = {
-    idle: "Tap to speak",
-    recording: "Listening… tap to stop",
-    transcribing: "Transcribing…",
-    ai_thinking: "Thinking…",
-    speaking: "Tap to interrupt",
-  }[voiceState];
+  const micLabel =
+    voiceState === "recording"
+      ? silenceProgress > 0 ? "Almost done…" : "Listening…"
+      : voiceState === "transcribing" ? "Transcribing…"
+      : voiceState === "ai_thinking"  ? "Thinking…"
+      : voiceState === "speaking"     ? "Tap to interrupt"
+      : "Tap to speak";
 
   return (
     <div className="rounded-lg border border-violet-200 bg-violet-50/40 overflow-hidden flex flex-col">
@@ -1104,12 +1188,30 @@ function AiChatPanel({
                 : "h-20 w-20 bg-violet-600 hover:bg-violet-700 shadow-md shadow-violet-200"
             )}
           >
-            {/* Pulse rings */}
+            {/* Live audio-level ring — scales with voice amplitude */}
             {voiceState === "recording" && (
-              <>
-                <span className="absolute inset-0 rounded-full bg-red-400 animate-ping opacity-30" />
-                <span className="absolute -inset-2 rounded-full border-2 border-red-300 animate-ping opacity-20 [animation-delay:0.3s]" />
-              </>
+              <span
+                className="absolute inset-0 rounded-full bg-red-400 transition-transform duration-75 pointer-events-none"
+                style={{
+                  opacity: 0.15 + audioLevel * 0.35,
+                  transform: `scale(${1 + audioLevel * 0.45})`,
+                }}
+              />
+            )}
+            {/* Silence countdown arc — SVG circle that drains as silence grows */}
+            {voiceState === "recording" && silenceProgress > 0 && (
+              <svg className="absolute -inset-1.5 w-[calc(100%+12px)] h-[calc(100%+12px)] -rotate-90 pointer-events-none" viewBox="0 0 96 96">
+                <circle
+                  cx="48" cy="48" r="44"
+                  fill="none"
+                  stroke="rgba(239,68,68,0.5)"
+                  strokeWidth="3"
+                  strokeDasharray={`${2 * Math.PI * 44}`}
+                  strokeDashoffset={`${2 * Math.PI * 44 * (1 - silenceProgress)}`}
+                  strokeLinecap="round"
+                  className="transition-all duration-75"
+                />
+              </svg>
             )}
             {isSpeaking && (
               <span className="absolute inset-0 rounded-full bg-violet-400 animate-ping opacity-25" />
@@ -1128,6 +1230,9 @@ function AiChatPanel({
 
           <span className="text-xs text-muted-foreground font-medium tracking-wide">{micLabel}</span>
 
+          {voiceState === "recording" && silenceProgress === 0 && (
+            <span className="text-[11px] text-muted-foreground/60">stops automatically when you pause</span>
+          )}
           {isSpeaking && (
             <span className="text-[11px] text-violet-500">tap to interrupt</span>
           )}
