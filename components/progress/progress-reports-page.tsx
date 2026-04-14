@@ -321,8 +321,12 @@ export function ProgressReportsPage({ initialReports, students }: Props) {
   // ── Inference manipulation ────────────────────────────────────────────────────
 
   function afterInferenceChange(newText: string) {
-    setEditor((prev) => ({ ...prev, text: newText }));
-    if (!hasReportMarkers(newText)) {
+    // If no more inferred (**) spans remain, strip any leftover IEP/NOTE markers too
+    // before exiting preview mode — the source labels are visual only, not part of the text.
+    const hasInferred = /\*\*[^*]+\*\*/.test(newText);
+    const cleanText = hasInferred ? newText : stripReportMarkers(newText);
+    setEditor((prev) => ({ ...prev, text: cleanText }));
+    if (!hasInferred) {
       setReportPreviewMode(false);
       setEditingInferIdx(-1);
     }
@@ -737,7 +741,17 @@ export function ProgressReportsPage({ initialReports, students }: Props) {
                           </button>
                           <button
                             className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-1 transition-colors"
-                            onClick={() => setReportPreviewMode(false)}
+                            onClick={() => {
+                              // Strip IEP/NOTE source markers when entering plain edit mode —
+                              // they're visual annotations only, not part of the report text.
+                              setEditor((prev) => ({
+                                ...prev,
+                                text: prev.text
+                                  .replace(/\{IEP\}([\s\S]*?)\{\/IEP\}/g, "$1")
+                                  .replace(/\{NOTE\}([\s\S]*?)\{\/NOTE\}/g, "$1"),
+                              }));
+                              setReportPreviewMode(false);
+                            }}
                           >
                             <Pencil className="h-3 w-3" /> Edit
                           </button>
