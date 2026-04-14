@@ -2,9 +2,12 @@
  * POST /api/progress-reports/chat
  *
  * AI chat assistant for progress report authoring.
- * Helps the SLP draft, refine, and improve a progress report through
- * conversational back-and-forth. Returns a reply and an optional
- * REPORT_UPDATE block with a revised/updated report draft.
+ * Guides the SLP from the very start — collecting the report title, date range,
+ * and clinical notes — through to a finished draft.
+ *
+ * Supports two structured output blocks in addition to plain conversational replies:
+ *   REPORT_UPDATE: <full report text>
+ *   FIELD_UPDATE: <JSON: { title?, startDate?, endDate? }>
  */
 
 import { NextRequest, NextResponse } from "next/server";
@@ -20,7 +23,12 @@ interface ReportContext {
   studentName: string;
   gradeLevel?: string | null;
   schoolName?: string | null;
-  reportPeriod: string;
+  /** Empty string when not yet set */
+  title: string;
+  /** "yyyy-MM-dd" or empty string */
+  startDate: string;
+  /** "yyyy-MM-dd" or empty string */
+  endDate: string;
   currentDraft: string;
   goals: Array<{ name: string; domain: string; targetAccuracy: number; status: string }>;
   sessionCount: number;
@@ -36,48 +44,80 @@ function buildSystemPrompt(ctx: ReportContext): string {
     ? ctx.goals.map(g =>
         `• ${g.name} (${g.domain}) — target ${Math.round(g.targetAccuracy * 100)}%, status: ${g.status}`
       ).join("\n")
-    : "No goals provided.";
+    : "No goals on file.";
 
-  const draftSection = ctx.currentDraft.trim()
-    ? `CURRENT REPORT DRAFT:\n"""\n${ctx.currentDraft.trim()}\n"""`
+  const titleStatus   = ctx.title     ? `"${ctx.title}"`     : "NOT SET";
+  const startStatus   = ctx.startDate ? ctx.startDate         : "NOT SET";
+  const endStatus     = ctx.endDate   ? ctx.endDate           : "NOT SET";
+  const draftStatus   = ctx.currentDraft.trim()
+    ? `CURRENT DRAFT:\n"""\n${ctx.currentDraft.trim()}\n"""`
     : "No draft written yet.";
 
-  return `You are an experienced school-based Speech-Language Pathologist helping to author a formal progress report. You are assisting the SLP who is writing the report — acting as a knowledgeable collaborator, not as the author yourself.
+  const setupComplete = !!(ctx.title && ctx.startDate && ctx.endDate);
 
-═══ STUDENT & REPORT CONTEXT ═══
-Student: ${ctx.studentName}${ctx.gradeLevel ? ` | Grade: ${ctx.gradeLevel}` : ""}${ctx.schoolName ? ` | School: ${ctx.schoolName}` : ""}
-Reporting period: ${ctx.reportPeriod}
-Sessions in period: ${ctx.sessionCount}
+  return `You are an experienced school-based Speech-Language Pathologist helping to author a formal progress report for a student on the SLP's caseload. You guide the SLP from the very beginning — collecting the report details and clinical observations — through to a finished, polished draft ready to send to parents or the IEP team.
+
+═══ STUDENT ═══
+Name: ${ctx.studentName}${ctx.gradeLevel ? ` | Grade: ${ctx.gradeLevel}` : ""}${ctx.schoolName ? ` | School: ${ctx.schoolName}` : ""}
+
+═══ REPORT SETUP STATUS ═══
+Title:       ${titleStatus}
+Start date:  ${startStatus}
+End date:    ${endStatus}
+Sessions loaded: ${ctx.sessionCount}
 
 ═══ IEP GOALS ═══
 ${goalLines}
 
-═══ ${draftSection} ═══
+═══ ${draftStatus} ═══
 
-═══ YOUR ROLE ═══
-You can help the SLP with any of the following:
-1. Drafting or refining the report from scratch or from notes they share
-2. Improving specific sections — opening paragraph, goal paragraphs, recommendations
-3. Adjusting tone, clarity, or reading level (e.g. "make this more parent-friendly")
-4. Asking clarifying questions to fill in missing clinical detail
-5. Suggesting more precise clinical language for vague descriptions
-6. Reviewing and critiquing a draft for completeness, accuracy, or professional tone
+═══ YOUR WORKFLOW ═══
+${setupComplete ? `
+Report setup is complete. Focus on helping the SLP build or refine the draft.
+` : `
+The report has not been fully set up yet (title or date range is missing).
+YOUR FIRST PRIORITY is to collect any missing setup information — ask for it directly, one item at a time:
+  1. Report title (e.g. "Q1 2026", "Fall Semester 2025–2026", "Annual Progress")
+  2. Reporting period start date (ask in plain English — e.g. "What date does this reporting period start?")
+  3. Reporting period end date
 
-When the SLP provides information or asks you to write/revise something:
+Once you have all three, confirm them and move on to collecting clinical information to write the report.
+`}
+
+After setup is complete, help the SLP with any of:
+— Drafting the full report from clinical notes they share
+— Refining or improving existing sections
+— Adjusting tone or clarity (e.g. "make this more parent-friendly")
+— Suggesting stronger clinical language
+— Reviewing a draft for completeness and accuracy
+
+═══ WRITING RULES (when producing report text) ═══
 — Write in the SLP's voice, addressed to the reader (parent/administrator/IEP team)
-— Third person for the student ("${ctx.studentName.split(" ")[0]}," "the student")
+— Third person for the student (use first name or "the student")
 — Past tense, professional, parent-readable prose
 — No headers, bullets, or markdown in report text — flowing paragraphs only
 — Base all clinical claims strictly on what the SLP tells you — never fabricate data
 
-REPORT_UPDATE protocol:
-When you produce a revised or new version of the full report (or a substantial new section), output it on a new line starting with EXACTLY:
+═══ OUTPUT PROTOCOLS ═══
+
+FIELD_UPDATE protocol — use this when the SLP gives you the title or dates:
+Output a line starting with EXACTLY:
+FIELD_UPDATE:
+followed immediately by a single JSON object with any combination of: title, startDate (yyyy-MM-dd), endDate (yyyy-MM-dd).
+Example:
+FIELD_UPDATE:
+{"title":"Q1 2026","startDate":"2026-01-01","endDate":"2026-03-31"}
+
+REPORT_UPDATE protocol — use this when you produce a full or substantially revised draft:
+Output a line starting with EXACTLY:
 REPORT_UPDATE:
-(followed immediately by the full updated report text — clean prose, no markers, no commentary)
+followed immediately by the full clean report text (no markers, no JSON, no commentary).
 
-Only output REPORT_UPDATE when you have a genuine full draft or revised section to offer. For clarifying questions, short suggestions, or commentary, reply as plain conversation — no REPORT_UPDATE.
-
-Tone: collegial, direct, expert. One or two paragraphs max per conversational reply. Do not over-explain.`;
+Rules:
+— You may output FIELD_UPDATE and REPORT_UPDATE in the same response if both apply
+— Always output a plain conversational reply as well — do not output ONLY a protocol block with no message
+— Keep conversational replies short: 1–3 sentences, no markdown bold/italic, no bullet points
+— Never output ** or __ formatting in your conversational message — plain text only`;
 }
 
 export async function POST(req: NextRequest) {
@@ -102,7 +142,7 @@ export async function POST(req: NextRequest) {
       messages.length === 0
         ? [{
             role: "user",
-            content: "I need help with this progress report. Start by briefly introducing what you can help with and ask me what I'd like to work on first.",
+            content: "Start the progress report assistant. Check the setup status and guide me through the first missing step.",
           }]
         : messages.map(m => ({ role: m.role, content: m.content }));
 
@@ -116,22 +156,37 @@ export async function POST(req: NextRequest) {
     const fullText =
       response.content[0]?.type === "text" ? response.content[0].text.trim() : "";
 
-    // Parse REPORT_UPDATE block
-    const marker = "REPORT_UPDATE:";
-    const markerIdx = fullText.indexOf(marker);
+    // Parse FIELD_UPDATE block
+    const fieldMarker = "FIELD_UPDATE:";
+    const fieldIdx = fullText.indexOf(fieldMarker);
+    let fieldUpdate: Record<string, string> | null = null;
+    let textAfterField = fullText;
 
-    let reply = fullText;
-    let reportUpdate: string | null = null;
-
-    if (markerIdx !== -1) {
-      reportUpdate = fullText.slice(markerIdx + marker.length).trim();
-      reply = fullText.slice(0, markerIdx).trim();
-      if (!reply) {
-        reply = "Here's an updated draft based on what you've shared:";
-      }
+    if (fieldIdx !== -1) {
+      const afterMarker = fullText.slice(fieldIdx + fieldMarker.length).trim();
+      // JSON ends at the first newline after the closing brace
+      const jsonEnd = afterMarker.indexOf("\n", afterMarker.indexOf("}"));
+      const jsonStr = jsonEnd !== -1 ? afterMarker.slice(0, jsonEnd + 1) : afterMarker.split("\n")[0];
+      try {
+        fieldUpdate = JSON.parse(jsonStr.trim());
+      } catch { /* ignore malformed JSON */ }
+      // Remove FIELD_UPDATE block from text before looking for REPORT_UPDATE
+      textAfterField = (fullText.slice(0, fieldIdx) + "\n" + fullText.slice(fieldIdx + fieldMarker.length + (jsonEnd !== -1 ? jsonEnd + 1 : jsonStr.length))).trim();
     }
 
-    return NextResponse.json({ reply, reportUpdate });
+    // Parse REPORT_UPDATE block
+    const reportMarker = "REPORT_UPDATE:";
+    const reportIdx = textAfterField.indexOf(reportMarker);
+    let reportUpdate: string | null = null;
+    let reply = textAfterField;
+
+    if (reportIdx !== -1) {
+      reportUpdate = textAfterField.slice(reportIdx + reportMarker.length).trim();
+      reply = textAfterField.slice(0, reportIdx).trim();
+      if (!reply) reply = "Here's a draft based on what you've shared:";
+    }
+
+    return NextResponse.json({ reply, reportUpdate, fieldUpdate });
   } catch (err) {
     console.error("[progress-reports/chat]", err);
     const msg = err instanceof Error ? err.message : "Failed to get AI response";

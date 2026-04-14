@@ -129,10 +129,17 @@ interface ReportChatContext {
   studentName: string;
   gradeLevel?: string | null;
   schoolName?: string | null;
-  reportPeriod: string;
+  title: string;
+  startDate: string;
+  endDate: string;
   currentDraft: string;
   goals: Array<{ name: string; domain: string; targetAccuracy: number; status: string }>;
   sessionCount: number;
+}
+
+/** Render plain-text AI messages: strip any stray ** markdown the model emits */
+function renderAiMessage(text: string): string {
+  return text.replace(/\*\*([^*]+)\*\*/g, "$1").replace(/\*([^*]+)\*/g, "$1");
 }
 
 // ─── ReportChatPanel ──────────────────────────────────────────────────────────
@@ -141,10 +148,12 @@ function ReportChatPanel({
   context,
   onClose,
   onApplyReport,
+  onApplyFields,
 }: {
   context: ReportChatContext;
   onClose: () => void;
   onApplyReport: (text: string) => void;
+  onApplyFields: (fields: { title?: string; startDate?: string; endDate?: string }) => void;
 }) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [textInput, setTextInput] = useState("");
@@ -189,6 +198,9 @@ function ReportChatPanel({
       if (json.reportUpdate) {
         setPendingReportUpdate(json.reportUpdate);
         setLatestReportUpdate(json.reportUpdate);
+      }
+      if (json.fieldUpdate && typeof json.fieldUpdate === "object") {
+        onApplyFields(json.fieldUpdate);
       }
     } catch {
       setMessages((prev) => [
@@ -266,7 +278,7 @@ function ReportChatPanel({
                 ? "bg-primary text-primary-foreground rounded-br-sm"
                 : "bg-white border border-violet-100 text-foreground rounded-bl-sm shadow-sm"
             )}>
-              {msg.content}
+              {msg.role === "assistant" ? renderAiMessage(msg.content) : msg.content}
             </div>
           </div>
         ))}
@@ -1105,9 +1117,9 @@ export function ProgressReportsPage({ initialReports, students }: Props) {
                 studentName: `${selectedStudent.firstName} ${selectedStudent.lastName}`,
                 gradeLevel: selectedStudent.gradeLevel,
                 schoolName: selectedStudent.schoolName,
-                reportPeriod: editor.startDate && editor.endDate
-                  ? `${formatDate(editor.startDate)} – ${formatDate(editor.endDate)}`
-                  : "Not specified",
+                title: editor.title,
+                startDate: editor.startDate,
+                endDate: editor.endDate,
                 currentDraft: stripReportMarkers(editor.text),
                 goals: selectedStudent.goals.map(g => ({
                   name: g.shortName ?? g.goalText.slice(0, 60),
@@ -1118,6 +1130,14 @@ export function ProgressReportsPage({ initialReports, students }: Props) {
                 sessionCount: metadata?.sessionCount ?? 0,
               }}
               onClose={() => setShowChat(false)}
+              onApplyFields={(fields) => {
+                setEditor((prev) => ({
+                  ...prev,
+                  ...(fields.title     ? { title: fields.title }         : {}),
+                  ...(fields.startDate ? { startDate: fields.startDate } : {}),
+                  ...(fields.endDate   ? { endDate: fields.endDate }     : {}),
+                }));
+              }}
               onApplyReport={(text) => {
                 setEditor((prev) => ({ ...prev, text, isAiGenerated: true }));
                 setReportPreviewMode(hasReportMarkers(text));
