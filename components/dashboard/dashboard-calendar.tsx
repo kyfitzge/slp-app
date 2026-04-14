@@ -260,7 +260,7 @@ function SessionChip({
 
 function MonthView({
   currentDate, sessions, dragOverSlot, onDragOver, onDragLeave, onDrop, onDelete,
-  draggingId, onSessionDragStart, onDragEnd,
+  draggingId, onSessionDragStart, onDragEnd, onDayClick,
 }: {
   currentDate: Date;
   sessions: CalendarSession[];
@@ -272,6 +272,7 @@ function MonthView({
   draggingId: string | null;
   onSessionDragStart: (id: string) => void;
   onDragEnd: () => void;
+  onDayClick: (date: Date) => void;
 }) {
   const days = getMonthGrid(currentDate);
 
@@ -307,15 +308,18 @@ function MonthView({
               onDragLeave={onDragLeave}
               onDrop={e => onDrop(e, day, "")}
             >
-              {/* Date number */}
-              <span className={cn(
-                "text-xs font-medium inline-flex w-6 h-6 items-center justify-center rounded-full mb-0.5",
-                today   && "bg-primary text-primary-foreground",
-                !today  && !inMonth && "text-muted-foreground/40",
-                !today  && inMonth  && "text-foreground",
-              )}>
+              {/* Date number — click to drill into day view */}
+              <button
+                onClick={() => onDayClick(day)}
+                className={cn(
+                  "text-xs font-medium inline-flex w-6 h-6 items-center justify-center rounded-full mb-0.5 transition-colors",
+                  today   && "bg-primary text-primary-foreground hover:bg-primary/90",
+                  !today  && !inMonth && "text-muted-foreground/40 hover:bg-muted",
+                  !today  && inMonth  && "text-foreground hover:bg-muted",
+                )}
+              >
                 {format(day, "d")}
-              </span>
+              </button>
 
               {/* Events */}
               <div className="space-y-0.5">
@@ -324,9 +328,12 @@ function MonthView({
                     draggingId={draggingId} onDragStart={onSessionDragStart} onDragEnd={onDragEnd} />
                 ))}
                 {daySessions.length > 3 && (
-                  <span className="text-xs text-muted-foreground px-1 block">
+                  <button
+                    onClick={() => onDayClick(day)}
+                    className="text-xs text-muted-foreground hover:text-foreground px-1 block w-full text-left transition-colors"
+                  >
                     +{daySessions.length - 3} more
-                  </span>
+                  </button>
                 )}
               </div>
 
@@ -1043,6 +1050,7 @@ export function DashboardCalendar({ initialSessions }: DashboardCalendarProps) {
             draggingId={draggingSessionId}
             onSessionDragStart={setDraggingSessionId}
             onDragEnd={() => setDraggingSessionId(null)}
+            onDayClick={(day) => { setCurrentDate(day); setView("day"); }}
           />
         ) : (
           <TimeGridView
