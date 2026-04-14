@@ -33,7 +33,7 @@ export async function POST(req: NextRequest) {
       model: "tts-1",
       voice: "nova", // warm, natural-sounding voice
       input: text.slice(0, 4096), // API limit
-      speed: 1.0,
+      speed: 1.25,
     });
 
     const buffer = Buffer.from(await mp3.arrayBuffer());

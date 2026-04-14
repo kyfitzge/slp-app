@@ -93,6 +93,7 @@ export function ProgressReportsPage({ initialReports, students }: Props) {
   const [isLoadingReport, setIsLoadingReport] = useState(false);
   const [metadata, setMetadata] = useState<GenerateMetadata | null>(null);
   const [showHistory, setShowHistory] = useState(false);
+  const [isEditingFinalized, setIsEditingFinalized] = useState(false);
 
   const reportsByStudent = useMemo(() => {
     const map: Record<string, ReportListItem[]> = {};
@@ -110,6 +111,7 @@ export function ProgressReportsPage({ initialReports, students }: Props) {
     setEditor({ reportId: null, title: "", startDate: "", endDate: today, text: "", isAiGenerated: false, isDraft: true });
     setMetadata(null);
     setShowHistory(false);
+    setIsEditingFinalized(false);
   }
 
   function handleSelectStudent(id: string) {
@@ -135,6 +137,7 @@ export function ProgressReportsPage({ initialReports, students }: Props) {
         isDraft: report.isDraft,
       });
       setMetadata(null);
+      setIsEditingFinalized(false);
     } catch {
       toast.error("Failed to load report.");
     } finally {
@@ -275,6 +278,8 @@ export function ProgressReportsPage({ initialReports, students }: Props) {
     }
   }
 
+  // A report is editable if it's a draft OR if the user has clicked "Edit" on a finalized one
+  const isEditable = editor.isDraft || isEditingFinalized || !editor.reportId;
   const canGenerate = !!selectedStudentId && !!editor.startDate && !!editor.endDate;
   const canSave = !!selectedStudentId && editor.text.trim().length > 0;
 
@@ -306,10 +311,6 @@ export function ProgressReportsPage({ initialReports, students }: Props) {
               students={students}
               selectedId={selectedStudentId}
               onSelect={handleSelectStudent}
-              getStudentMeta={(id) => {
-                const count = reportsByStudent[id]?.length ?? 0;
-                return count > 0 ? `${count} report${count !== 1 ? "s" : ""}` : null;
-              }}
             />
           </CardContent>
         </Card>
@@ -440,7 +441,7 @@ export function ProgressReportsPage({ initialReports, students }: Props) {
                     value={editor.title}
                     onChange={(e) => setEditor((prev) => ({ ...prev, title: e.target.value }))}
                     className="h-8 text-sm flex-1"
-                    disabled={!editor.isDraft && !!editor.reportId}
+                    disabled={!isEditable}
                   />
                   <div className="flex gap-2 shrink-0">
                     <div className="flex items-center gap-1.5">
@@ -450,7 +451,7 @@ export function ProgressReportsPage({ initialReports, students }: Props) {
                         value={editor.startDate}
                         onChange={(e) => setEditor((prev) => ({ ...prev, startDate: e.target.value }))}
                         className="h-8 text-sm w-36"
-                        disabled={!editor.isDraft && !!editor.reportId}
+                        disabled={!isEditable}
                       />
                     </div>
                     <div className="flex items-center gap-1.5">
@@ -460,7 +461,7 @@ export function ProgressReportsPage({ initialReports, students }: Props) {
                         value={editor.endDate}
                         onChange={(e) => setEditor((prev) => ({ ...prev, endDate: e.target.value }))}
                         className="h-8 text-sm w-36"
-                        disabled={!editor.isDraft && !!editor.reportId}
+                        disabled={!isEditable}
                       />
                     </div>
                   </div>
@@ -468,7 +469,7 @@ export function ProgressReportsPage({ initialReports, students }: Props) {
 
                 {/* Action buttons */}
                 <div className="shrink-0 flex items-center gap-2 flex-wrap">
-                  {(editor.isDraft || !editor.reportId) && (
+                  {isEditable ? (
                     <>
                       <Button
                         size="sm"
@@ -501,6 +502,17 @@ export function ProgressReportsPage({ initialReports, students }: Props) {
                         Finalize
                       </Button>
                     </>
+                  ) : (
+                    /* Finalized and not editing — show Edit button */
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => setIsEditingFinalized(true)}
+                      className="gap-1.5 h-8 text-xs hover:bg-muted"
+                    >
+                      <PenLine className="h-3.5 w-3.5" />
+                      Edit
+                    </Button>
                   )}
                   {metadata && (
                     <span className="ml-auto text-xs text-muted-foreground">
@@ -515,14 +527,14 @@ export function ProgressReportsPage({ initialReports, students }: Props) {
                     value={editor.text}
                     onChange={(e) => setEditor((prev) => ({ ...prev, text: e.target.value }))}
                     placeholder={
-                      !editor.isDraft && editor.reportId
+                      !isEditable
                         ? "This report has been finalized."
                         : "Start writing, or click Generate to create an AI-assisted draft from session data."
                     }
-                    readOnly={!editor.isDraft && !!editor.reportId}
+                    readOnly={!isEditable}
                     className={cn(
                       "flex-1 resize-none text-sm leading-relaxed font-sans min-h-0",
-                      !editor.isDraft && !!editor.reportId && "opacity-75 cursor-default"
+                      !isEditable && "opacity-75 cursor-default"
                     )}
                   />
                   <div className="flex items-center justify-between shrink-0">

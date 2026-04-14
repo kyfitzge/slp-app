@@ -161,10 +161,21 @@ NOTE FORMAT — 2–4 paragraphs of narrative prose:
 
 STYLE RULES:
   — Past tense throughout
-  — No headers, bullets, or markdown — plain prose only
+  — No headers, bullets — plain prose only
   — Professional, objective, clinically appropriate — no filler, no AI-sounding phrases
   — Every sentence should carry clinical value
   — Read like something an experienced SLP would actually write
+
+INFERENCE MARKING — IMPORTANT:
+  Wrap ONLY text that you inferred, normalized, or added beyond what the SLP explicitly stated in **double asterisks**.
+  This includes:
+    — Normalized clinical terminology (e.g. **"direct verbal cues"** inferred from "had to help a lot")
+    — Inferred or elaborated activity descriptions (e.g. **"structured drill using picture stimuli"** from "used flashcards")
+    — Added clinical context or plan statements not explicitly mentioned
+    — Standard clinical phrasing layered onto vague descriptions
+  Do NOT mark content that directly reflects what the SLP said, even if rephrased.
+  Do NOT over-mark — only flag genuinely new additions, not every clinical word.
+  This is the ONLY markdown allowed. No other formatting.
 
 Output ONLY the note text — no preamble, no labels, no JSON.`;
 }
@@ -204,7 +215,7 @@ export async function POST(
 
     const message = await client.messages.create({
       model: process.env.LLM_NOTE_MODEL ?? "claude-haiku-4-5",
-      max_tokens: 900,
+      max_tokens: 1100,
       messages: [{ role: "user", content: buildPrompt(body) }],
     });
 

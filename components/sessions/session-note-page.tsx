@@ -745,6 +745,8 @@ function AiChatPanel({
   const messagesRef = useRef<AiChatMessage[]>([]); // always-current mirror for async closures
   const [voiceState, setVoiceState] = useState<AiVoiceState>("ai_thinking");
   const [pendingNoteUpdate, setPendingNoteUpdate] = useState<string | null>(null);
+  /** Latest accumulated note context — persists throughout the interview so the SLP can apply at any point */
+  const [latestNoteUpdate, setLatestNoteUpdate] = useState<string | null>(null);
   const [statusMsg, setStatusMsg] = useState<string | null>(null);
   const [ttsAvailable, setTtsAvailable] = useState(true);
   const [audioLevel, setAudioLevel] = useState(0);       // 0–1, for live ring
@@ -1022,7 +1024,10 @@ function AiChatPanel({
       const aiMsg: AiChatMessage = { role: "assistant", content: json.reply };
       setMsgs([...messagesRef.current, aiMsg]);
 
-      if (json.noteUpdate) setPendingNoteUpdate(json.noteUpdate);
+      if (json.noteUpdate) {
+        setPendingNoteUpdate(json.noteUpdate);
+        setLatestNoteUpdate(json.noteUpdate); // persists so button stays available
+      }
 
       if (speakResponse && json.reply) {
         // After AI speaks, auto-start listening for the SLP's next answer
@@ -1046,15 +1051,19 @@ function AiChatPanel({
     const userMsg: AiChatMessage = { role: "user", content: trimmed };
     const newHistory = [...messagesRef.current, userMsg];
     setMsgs(newHistory);
-    setPendingNoteUpdate(null);
+    setPendingNoteUpdate(null); // hide the card when user continues chatting
     setStatusMsg(null);
     sendToAI(newHistory, speakResponse);
   }
 
-  function applyNote() {
-    if (!pendingNoteUpdate) return;
-    onApplyNote(pendingNoteUpdate);
+  function applyNote(source?: string | null) {
+    // Use provided source, fall back to latest accumulated update, or build from raw user answers
+    const effective = source ?? latestNoteUpdate ?? pendingNoteUpdate
+      ?? messagesRef.current.filter(m => m.role === "user").map(m => m.content).join(". ");
+    if (!effective.trim()) return;
+    onApplyNote(effective);
     setPendingNoteUpdate(null);
+    setLatestNoteUpdate(null);
     setMsgs([
       ...messagesRef.current,
       { role: "assistant", content: "Note updated. Is there anything else to add?" },
@@ -1148,22 +1157,15 @@ function AiChatPanel({
         <div ref={bottomRef} />
       </div>
 
-      {/* Note update card */}
+      {/* Note update prompt — just the two action buttons */}
       {pendingNoteUpdate && (
-        <div className="mx-3.5 mb-3 rounded-lg border border-violet-200 bg-white p-3 space-y-2 shrink-0">
-          <div className="flex items-center gap-1.5 text-xs font-semibold text-violet-700">
-            <Sparkles className="h-3.5 w-3.5" />
-            Suggested note update
-          </div>
-          <p className="text-xs text-muted-foreground leading-relaxed line-clamp-3">{pendingNoteUpdate}</p>
-          <div className="flex gap-2">
-            <Button type="button" size="sm" className="h-7 text-xs gap-1.5 bg-violet-600 hover:bg-violet-700" onClick={applyNote}>
-              <Check className="h-3 w-3" /> Apply to note
-            </Button>
-            <Button type="button" size="sm" variant="ghost" className="h-7 text-xs text-muted-foreground" onClick={() => setPendingNoteUpdate(null)}>
-              Dismiss
-            </Button>
-          </div>
+        <div className="mx-3.5 mb-3 flex gap-2 shrink-0">
+          <Button type="button" size="sm" className="h-7 text-xs gap-1.5 bg-violet-600 hover:bg-violet-700" onClick={() => applyNote()}>
+            <Check className="h-3 w-3" /> Apply to note
+          </Button>
+          <Button type="button" size="sm" variant="ghost" className="h-7 text-xs text-muted-foreground" onClick={() => setPendingNoteUpdate(null)}>
+            Dismiss
+          </Button>
         </div>
       )}
 
@@ -1245,6 +1247,17 @@ function AiChatPanel({
           )}
         </div>
 
+        {/* Persistent apply-to-note button — enabled once the SLP has said anything */}
+        <button
+          type="button"
+          disabled={messages.filter(m => m.role === "user").length === 0}
+          onClick={() => applyNote()}
+          className="flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium bg-violet-600 text-white hover:bg-violet-700 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+        >
+          <Check className="h-3 w-3" />
+          Apply to note
+        </button>
+
       </div>
     </div>
   );
@@ -1268,6 +1281,7 @@ function TextChatPanel({
   const [textInput, setTextInput] = useState("");
   const [isThinking, setIsThinking] = useState(true);
   const [pendingNoteUpdate, setPendingNoteUpdate] = useState<string | null>(null);
+  const [latestNoteUpdate, setLatestNoteUpdate] = useState<string | null>(null);
 
   const initRef = useRef(false);
   const bottomRef = useRef<HTMLDivElement>(null);
@@ -1301,7 +1315,10 @@ function TextChatPanel({
 
       const aiMsg: AiChatMessage = { role: "assistant", content: json.reply };
       setMessages((prev) => [...prev, aiMsg]);
-      if (json.noteUpdate) setPendingNoteUpdate(json.noteUpdate);
+      if (json.noteUpdate) {
+        setPendingNoteUpdate(json.noteUpdate);
+        setLatestNoteUpdate(json.noteUpdate);
+      }
     } catch {
       setMessages((prev) => [
         ...prev,
@@ -1320,14 +1337,17 @@ function TextChatPanel({
     const newHistory = [...messages, userMsg];
     setMessages(newHistory);
     setTextInput("");
-    setPendingNoteUpdate(null);
+    setPendingNoteUpdate(null); // hide the card, but latestNoteUpdate persists
     sendToAI(newHistory);
   }
 
-  function applyNote() {
-    if (!pendingNoteUpdate) return;
-    onApplyNote(pendingNoteUpdate);
+  function applyNote(source?: string | null) {
+    const effective = source ?? latestNoteUpdate ?? pendingNoteUpdate
+      ?? messages.filter(m => m.role === "user").map(m => m.content).join(". ");
+    if (!effective.trim()) return;
+    onApplyNote(effective);
     setPendingNoteUpdate(null);
+    setLatestNoteUpdate(null);
     setMessages((prev) => [
       ...prev,
       { role: "assistant", content: "Note updated. Is there anything else to add?" },
@@ -1401,27 +1421,20 @@ function TextChatPanel({
         <div ref={bottomRef} />
       </div>
 
-      {/* Note update card */}
+      {/* Note update prompt — just the two action buttons */}
       {pendingNoteUpdate && (
-        <div className="mx-3.5 mb-3 rounded-lg border border-violet-200 bg-white p-3 space-y-2 shrink-0">
-          <div className="flex items-center gap-1.5 text-xs font-semibold text-violet-700">
-            <Sparkles className="h-3.5 w-3.5" />
-            Suggested note update
-          </div>
-          <p className="text-xs text-muted-foreground leading-relaxed line-clamp-3">{pendingNoteUpdate}</p>
-          <div className="flex gap-2">
-            <Button type="button" size="sm" className="h-7 text-xs gap-1.5 bg-violet-600 hover:bg-violet-700" onClick={applyNote}>
-              <Check className="h-3 w-3" /> Apply to note
-            </Button>
-            <Button type="button" size="sm" variant="ghost" className="h-7 text-xs text-muted-foreground" onClick={() => setPendingNoteUpdate(null)}>
-              Dismiss
-            </Button>
-          </div>
+        <div className="mx-3.5 mb-3 flex gap-2 shrink-0">
+          <Button type="button" size="sm" className="h-7 text-xs gap-1.5 bg-violet-600 hover:bg-violet-700" onClick={() => applyNote()}>
+            <Check className="h-3 w-3" /> Apply to note
+          </Button>
+          <Button type="button" size="sm" variant="ghost" className="h-7 text-xs text-muted-foreground" onClick={() => setPendingNoteUpdate(null)}>
+            Dismiss
+          </Button>
         </div>
       )}
 
-      {/* Text input */}
-      <div className="border-t border-violet-200 bg-white px-3.5 py-3 shrink-0">
+      {/* Text input + persistent apply button */}
+      <div className="border-t border-violet-200 bg-white px-3.5 py-3 shrink-0 space-y-2">
         <div className="flex gap-2 items-end">
           <textarea
             ref={textInputRef}
@@ -1448,6 +1461,15 @@ function TextChatPanel({
             <Send className="h-3.5 w-3.5" />
           </Button>
         </div>
+        <button
+          type="button"
+          disabled={messages.filter(m => m.role === "user").length === 0}
+          onClick={() => applyNote()}
+          className="w-full flex items-center justify-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium bg-violet-600 text-white hover:bg-violet-700 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+        >
+          <Check className="h-3 w-3" />
+          Apply to note
+        </button>
       </div>
     </div>
   );
@@ -1944,6 +1966,12 @@ export function SessionNotePage({
   );
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   const noteDebouncRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  /** true when the note was just AI-generated and still contains **inference** markers */
+  const [notePreviewMode, setNotePreviewMode] = useState(false);
+  /** Index of the inference span currently being edited inline (-1 = none) */
+  const [editingInferenceIdx, setEditingInferenceIdx] = useState(-1);
+  const [editingInferenceValue, setEditingInferenceValue] = useState("");
+  const editingSpanRef = useRef<HTMLSpanElement>(null);
 
   async function generateNote(contextOverride?: string) {
     setGenerating(true);
@@ -1998,12 +2026,16 @@ export function SessionNotePage({
       if (!res.ok) throw new Error(json.error ?? "Generation failed");
       const draft: string = json.draftNote;
       setNoteDraft(draft);
-      setNoteExtractionContext(draft);
+      // Use marker-stripped text for extraction so ** doesn't confuse the parsers
+      const cleanDraft = draft.replace(/\*\*([^*]+)\*\*/g, "$1");
+      setNoteExtractionContext(cleanDraft);
       setGeneratedAt(new Date());
       setHasUnsavedChanges(true);
+      // Enter preview mode if the AI marked any inferred content
+      setNotePreviewMode(/\*\*[^*]+\*\*/.test(draft));
       toast.success("Note generated");
       // Extract structured data from the generated clinical note
-      extractStructuredData(draft);
+      extractStructuredData(cleanDraft);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Failed to generate note");
     } finally {
@@ -2011,15 +2043,16 @@ export function SessionNotePage({
     }
   }
 
-  /** Persist the note draft to the DB. */
+  /** Persist the note draft to the DB. Always strips inference markers before saving. */
   async function persistNote(note: string) {
     if (!note.trim()) return;
+    const cleanNote = note.replace(/\*\*([^*]+)\*\*/g, "$1");
     setNoteStatus("saving");
     try {
       const res = await fetch(`/api/sessions/${sessionId}/notes`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ noteText: note }),
+        body: JSON.stringify({ noteText: cleanNote }),
       });
       if (!res.ok) throw new Error();
       setNoteStatus("saved");
@@ -2034,7 +2067,8 @@ export function SessionNotePage({
     setNoteDraft(text);
     setNoteStatus("idle");
     setHasUnsavedChanges(true);
-    setNoteExtractionContext(text);
+    setNotePreviewMode(false);
+    setNoteExtractionContext(text.replace(/\*\*([^*]+)\*\*/g, "$1"));
 
     // If the note is fully cleared, reset all derived/extracted data so the
     // structured session data panel clears out too.
@@ -2057,6 +2091,105 @@ export function SessionNotePage({
         extractStructuredData(combined);
       }
     }, 1500);
+  }
+
+  /** Shared helper: after mutating noteDraft, exit preview mode if no markers remain. */
+  function afterInferenceChange(newDraft: string) {
+    setNoteDraft(newDraft);
+    setHasUnsavedChanges(true);
+    if (!/\*\*[^*]+\*\*/.test(newDraft)) {
+      setNotePreviewMode(false);
+      setNoteExtractionContext(newDraft);
+    }
+  }
+
+  /** Accept a single inferred span — keeps the text, removes markers. */
+  function acceptInference(idx: number) {
+    let count = 0;
+    const newDraft = noteDraft.replace(/\*\*([^*]+)\*\*/g, (match, content) => {
+      const result = count === idx ? content : match;
+      count++;
+      return result;
+    });
+    afterInferenceChange(newDraft);
+  }
+
+  /** Deny a single inferred span — removes the entire sentence containing it. */
+  function denyInference(idx: number) {
+    const text = noteDraft;
+
+    // Locate the nth **...** marker
+    let count = 0;
+    let markerStart = -1;
+    let markerEnd = -1;
+    text.replace(/\*\*([^*]+)\*\*/g, (match, _c, offset) => {
+      if (count === idx) { markerStart = offset; markerEnd = offset + match.length; }
+      count++;
+      return match;
+    });
+    if (markerStart === -1) return;
+
+    // ── Find sentence start ──────────────────────────────────────────────────
+    // Scan backward from markerStart; stop after .!? or \n
+    let sentStart = 0;
+    for (let i = markerStart - 1; i >= 0; i--) {
+      if (/[.!?]/.test(text[i])) {
+        // Start of our sentence is right after this punctuation + any spaces
+        let j = i + 1;
+        while (j < markerStart && text[j] === ' ') j++;
+        sentStart = j;
+        break;
+      }
+      if (text[i] === '\n') {
+        sentStart = i + 1;
+        break;
+      }
+    }
+
+    // ── Find sentence end ────────────────────────────────────────────────────
+    // Scan forward from markerStart (period may be inside the marker)
+    let sentEnd = text.length;
+    for (let i = markerStart; i < text.length; i++) {
+      if (/[.!?]/.test(text[i])) {
+        sentEnd = i + 1;
+        // Consume trailing spaces (preserve paragraph newlines)
+        while (sentEnd < text.length && text[sentEnd] === ' ') sentEnd++;
+        // Ensure we've gone past the closing ** of the marker
+        if (sentEnd < markerEnd) sentEnd = markerEnd;
+        break;
+      }
+      if (text[i] === '\n' && i >= markerEnd) {
+        sentEnd = i + 1;
+        break;
+      }
+    }
+
+    // ── Remove sentence and clean up extra blank lines ────────────────────────
+    const newDraft = (text.slice(0, sentStart) + text.slice(sentEnd))
+      .replace(/\n{3,}/g, '\n\n')
+      .replace(/^ +/gm, (m, offset) => offset === 0 ? '' : m) // trim leading spaces on first line
+      .trim();
+    afterInferenceChange(newDraft);
+  }
+
+  /** Begin inline editing of a single inferred span. */
+  function startEditInference(idx: number, currentText: string) {
+    setEditingInferenceIdx(idx);
+    setEditingInferenceValue(currentText);
+  }
+
+  /** Confirm the inline edit — replaces the span with the edited plain text. */
+  function confirmEditInference(idx: number, textOverride?: string) {
+    const replacement = (textOverride ?? editingSpanRef.current?.textContent ?? editingInferenceValue).trim();
+    let count = 0;
+    const newDraft = noteDraft.replace(/\*\*([^*]+)\*\*/g, (match) => {
+      const result = count === idx ? replacement : match;
+      count++;
+      return result;
+    });
+    setEditingInferenceIdx(-1);
+    setEditingInferenceValue("");
+    afterInferenceChange(newDraft);
   }
 
   /** Merge new information into the existing note without rewriting it. */
@@ -2356,43 +2489,159 @@ export function SessionNotePage({
                   }}
                 />
 
-                {/* Note textarea */}
+                {/* Note display — preview mode (inference highlights) or plain textarea */}
                 <div className="space-y-1.5">
-                  <Textarea
-                    value={noteDraft}
-                    onChange={(e) => handleNoteChange(e.target.value)}
-                    placeholder={
-                      generating
-                        ? "Generating note draft…"
-                        : "Record your session above, or click Generate to draft from goal data."
-                    }
-                    rows={(showAiChat || showTextChat || showSuggestEdits) ? 12 : 10}
-                    className="resize-y text-sm leading-relaxed font-sans"
-                    disabled={generating}
-                  />
-                  <div className="flex items-center justify-between">
-                    {noteDraft && (
-                      <span className="text-xs text-muted-foreground/70 italic flex items-center gap-1">
-                        <Bot className="h-3 w-3" />
-                        AI-generated — review and edit before saving
-                      </span>
-                    )}
-                    <span
-                      className={cn(
-                        "text-xs ml-auto transition-colors",
-                        noteStatus === "saved" ? "text-green-600" : "text-muted-foreground"
-                      )}
-                    >
-                      {noteStatus === "saving" && "Saving…"}
-                      {noteStatus === "saved" && "Draft saved ✓"}
-                    </span>
-                  </div>
+                  {notePreviewMode && noteDraft ? (
+                    <>
+                      {/* Rendered preview with per-inference hover-accept */}
+                      <div
+                        className="text-sm leading-relaxed font-sans rounded-md border border-input bg-background px-3 py-2 whitespace-pre-wrap"
+                        style={{ minHeight: (showAiChat || showTextChat || showSuggestEdits) ? "18rem" : "14rem" }}
+                      >
+                        {(() => {
+                          const parts = noteDraft.split(/\*\*([^*]+)\*\*/g);
+                          let inferIdx = 0;
+                          return parts.map((part, i) => {
+                            if (i % 2 === 1) {
+                              const currentIdx = inferIdx++;
+                              const isEditing = editingInferenceIdx === currentIdx;
+                              return (
+                                <span key={i} className="inline">
+                                  {isEditing ? (
+                                    /* ── contentEditable span: truly inline, wraps with surrounding text ── */
+                                    <>
+                                      <span
+                                        ref={editingSpanRef}
+                                        contentEditable
+                                        suppressContentEditableWarning
+                                        // dangerouslySetInnerHTML sets initial value; React won't fight contentEditable after mount
+                                        dangerouslySetInnerHTML={{ __html: editingInferenceValue }}
+                                        autoFocus
+                                        onKeyDown={(e) => {
+                                          if (e.key === "Enter") { e.preventDefault(); confirmEditInference(currentIdx, e.currentTarget.textContent ?? ""); }
+                                          if (e.key === "Escape") { setEditingInferenceIdx(-1); setEditingInferenceValue(""); }
+                                        }}
+                                        className="bg-amber-50 text-amber-900 font-semibold rounded px-0.5 border-b-2 border-amber-400 focus:border-amber-600 focus:outline-none cursor-text"
+                                      />
+                                      <span className="inline-flex items-center gap-0.5 ml-0.5 align-middle">
+                                        <button
+                                          title="Confirm"
+                                          onClick={(e) => { e.stopPropagation(); confirmEditInference(currentIdx, editingSpanRef.current?.textContent ?? ""); }}
+                                          className="inline-flex items-center justify-center h-4 w-4 rounded bg-emerald-100 text-emerald-700 border border-emerald-200 hover:bg-emerald-200 transition-colors"
+                                        >
+                                          <Check className="h-2.5 w-2.5" />
+                                        </button>
+                                        <button
+                                          title="Cancel"
+                                          onClick={(e) => { e.stopPropagation(); setEditingInferenceIdx(-1); setEditingInferenceValue(""); }}
+                                          className="inline-flex items-center justify-center h-4 w-4 rounded bg-muted text-muted-foreground border border-border hover:bg-muted/80 transition-colors"
+                                        >
+                                          <X className="h-2.5 w-2.5" />
+                                        </button>
+                                      </span>
+                                    </>
+                                  ) : (
+                                    /* ── Static highlight + action chips ── */
+                                    <>
+                                      <mark className="bg-amber-100 text-amber-900 rounded px-0.5 font-semibold not-italic">
+                                        {part}
+                                      </mark>
+                                      <span className="inline-flex items-center gap-0.5 ml-0.5 align-middle">
+                                        <button
+                                          title="Accept"
+                                          onClick={(e) => { e.stopPropagation(); acceptInference(currentIdx); }}
+                                          className="inline-flex items-center justify-center h-4 w-4 rounded bg-emerald-50 text-emerald-600 border border-emerald-200 hover:bg-emerald-100 transition-colors"
+                                        >
+                                          <Check className="h-2.5 w-2.5" />
+                                        </button>
+                                        <button
+                                          title="Edit"
+                                          onClick={(e) => { e.stopPropagation(); startEditInference(currentIdx, part); }}
+                                          className="inline-flex items-center justify-center h-4 w-4 rounded bg-blue-50 text-blue-600 border border-blue-200 hover:bg-blue-100 transition-colors"
+                                        >
+                                          <Pencil className="h-2.5 w-2.5" />
+                                        </button>
+                                        <button
+                                          title="Deny"
+                                          onClick={(e) => { e.stopPropagation(); denyInference(currentIdx); }}
+                                          className="inline-flex items-center justify-center h-4 w-4 rounded bg-red-50 text-red-500 border border-red-200 hover:bg-red-100 transition-colors"
+                                        >
+                                          <X className="h-2.5 w-2.5" />
+                                        </button>
+                                      </span>
+                                    </>
+                                  )}
+                                </span>
+                              );
+                            }
+                            return <span key={i}>{part}</span>;
+                          });
+                        })()}
+                      </div>
+                      {/* Preview action row */}
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs text-amber-700 flex items-center gap-1">
+                          <Sparkles className="h-3 w-3" />
+                          Use ✓ accept, ✏ edit, or ✗ deny on each highlighted phrase
+                        </span>
+                        <button
+                          className="ml-auto text-xs text-muted-foreground hover:text-foreground flex items-center gap-1 transition-colors"
+                          onClick={() => {
+                            const clean = noteDraft.replace(/\*\*([^*]+)\*\*/g, "$1");
+                            handleNoteChange(clean);
+                          }}
+                        >
+                          <Check className="h-3 w-3" />
+                          Accept all
+                        </button>
+                        <button
+                          className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-1 transition-colors"
+                          onClick={() => setNotePreviewMode(false)}
+                        >
+                          <Pencil className="h-3 w-3" />
+                          Edit
+                        </button>
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      <Textarea
+                        value={noteDraft}
+                        onChange={(e) => handleNoteChange(e.target.value)}
+                        placeholder={
+                          generating
+                            ? "Generating note draft…"
+                            : "Record your session above, or click Generate to draft from goal data."
+                        }
+                        rows={(showAiChat || showTextChat || showSuggestEdits) ? 12 : 10}
+                        className="resize-y text-sm leading-relaxed font-sans"
+                        disabled={generating}
+                      />
+                      <div className="flex items-center justify-between">
+                        {noteDraft && (
+                          <span className="text-xs text-muted-foreground/70 italic flex items-center gap-1">
+                            <Bot className="h-3 w-3" />
+                            AI-generated — review and edit before saving
+                          </span>
+                        )}
+                        <span
+                          className={cn(
+                            "text-xs ml-auto transition-colors",
+                            noteStatus === "saved" ? "text-green-600" : "text-muted-foreground"
+                          )}
+                        >
+                          {noteStatus === "saving" && "Saving…"}
+                          {noteStatus === "saved" && "Draft saved ✓"}
+                        </span>
+                      </div>
+                    </>
+                  )}
                 </div>
 
                 {noteDraft && (
                   <div className="flex items-center gap-3 text-xs text-muted-foreground/70 border-t pt-3">
-                    <span>{noteDraft.trim().split(/\s+/).filter(Boolean).length} words</span>
-                    {noteDraft.trim().length < 30 && (
+                    <span>{noteDraft.replace(/\*\*([^*]+)\*\*/g, "$1").trim().split(/\s+/).filter(Boolean).length} words</span>
+                    {noteDraft.replace(/\*\*([^*]+)\*\*/g, "$1").trim().length < 30 && (
                       <span className="text-amber-600">Note is very short</span>
                     )}
                   </div>
