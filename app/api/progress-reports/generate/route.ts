@@ -199,6 +199,7 @@ Syntax rules:
 - NEVER use [[ ]] or {{ }} — double brackets forbidden
 - Do NOT nest markers inside each other
 - Transitional words with no clinical meaning ("During this period,", "Overall,") may be left untagged
+`;
 
     const userMessage = `Write the progress report using the student and session data below.
 
