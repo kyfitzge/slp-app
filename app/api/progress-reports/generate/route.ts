@@ -164,24 +164,38 @@ Close with a brief paragraph (2–4 sentences) on next steps and recommendations
 
 ## Source Attribution Markers — REQUIRED
 
-Tag every substantive phrase with exactly one marker. Use square-bracket tags ONLY — never use curly braces { } for tagging.
+Use square-bracket tags ONLY — never curly braces { } for any marker.
 
-**[IEP]...[/IEP]** — content drawn directly from the IEP: goal names, target accuracy percentages, IEP status, goal domains, baseline scores, service dates.
+**[IEP]...[/IEP]** — content whose sole source is the IEP record: goal names, target accuracy percentages, goal domains, baseline scores, IEP status, service dates, present levels text.
 Example: [IEP]Ethan's /r/ articulation goal targets 80% accuracy[/IEP]
 
-**[NOTE]...[/NOTE]** — content drawn directly from session notes or recorded data points: observed accuracy percentages, trial counts, cueing levels, activities, behavioral observations.
+**[NOTE]...[/NOTE]** — content whose sole source is session notes or recorded data points: observed accuracy percentages, trial counts, cueing levels used, specific activities named by the clinician, behavioral observations written in notes.
 Example: [NOTE]Ethan produced /r/ correctly on 6 of 10 trials with direct verbal cues[/NOTE]
 
-**\*\*...\*\*** — content you inferred, synthesized, or added: trend interpretations, clinical conclusions, normalized phrasing, recommended next steps, transitional sentences.
-Example: \*\*progress appears to be emerging, with accuracy improving across sessions\*\*
+**\*\*...\*\*** — content YOU added that was not explicitly present in either the IEP or session notes. Apply the test: "Is this phrase directly present in the source data, or did I derive/synthesize/conclude it myself?"
 
-Rules:
-- Use ONLY these three marker styles — [IEP][/IEP], [NOTE][/NOTE], and **
-- NEVER use { or } — curly braces are forbidden
-- NEVER use [[ or ]] or {{ or }} — double brackets of any kind are forbidden
-- A single sentence may contain multiple spans of different types
-- Transitional words ("During this period," "Overall,") with no clinical content may be left untagged
-- Do NOT nest one marker inside another`;
+ALWAYS mark with **:
+- Trend interpretations derived from data (e.g. **"accuracy appears to be improving across sessions"** — even if data shows this, the interpretation is yours)
+- Progress judgments and conclusions (e.g. **"suggests the skill has not yet generalized"**, **"indicating emerging mastery"**)
+- Recommendations and next steps (e.g. **"continued practice in varied contexts is recommended"**)
+- Clinical elaborations beyond what the note literally says (e.g. note says "used flashcards" → **"structured drill using picture stimuli"**)
+- Any sentence you constructed to connect or summarize information
+- Descriptions of what data "suggests," "indicates," or "shows" — these are your interpretations
+
+NEVER mark with **:
+- Specific numbers directly from data: accuracy percentages, trial counts (e.g. "80% accuracy", "6 of 10 trials" — these go in [NOTE])
+- Goal names, domains, targets directly from the IEP — these go in [IEP]
+- Activities or tasks explicitly named in session notes — these go in [NOTE]
+- Student name, reporting period dates, session count — factual, leave untagged
+
+SPAN SIZE: Mark the smallest meaningful phrase that is the inference — not the entire sentence unless the whole sentence is your addition. A single sentence will often have [NOTE] or [IEP] spans alongside ** spans.
+
+Syntax rules:
+- Use ONLY [IEP][/IEP], [NOTE][/NOTE], and **double asterisks**
+- NEVER use { } — curly braces are forbidden
+- NEVER use [[ ]] or {{ }} — double brackets forbidden
+- Do NOT nest markers inside each other
+- Transitional words with no clinical meaning ("During this period,", "Overall,") may be left untagged
 
     const userMessage = `Write the progress report using the student and session data below.
 
