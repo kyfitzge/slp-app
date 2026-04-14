@@ -136,14 +136,23 @@ function extractFromText(text: string): ExtractedData {
   if (!text.trim()) return {};
   const result: ExtractedData = {};
 
-  // Handle "18/27", "18 out of 27", "18 correct responses out of 27", etc.
+  // Trial extraction — try patterns from most specific to least:
+  //   "8/10"  |  "8 out of 10" (up to 8 words between)  |  "8 of 10 trials"  |  "8 of 10"
   const trialMatch =
-    text.match(/\b(\d+)\b(?:\s+\w+){0,4}\s+out\s+of\s+(\d+)/i) ||
-    text.match(/(\d+)\s*\/\s*(\d+)/);
+    text.match(/\b(\d+)\s*\/\s*(\d+)\b/) ||
+    text.match(/\b(\d+)\b(?:\s+\S+){0,8}\s+out\s+of\s+(\d+)\b/i) ||
+    text.match(/\b(\d+)\s+of\s+(\d+)\s+trials?\b/i) ||
+    text.match(/\b(\d+)\s+(?:correct|accurate|right)\s+(?:out\s+of|of)\s+(\d+)\b/i) ||
+    text.match(/\b(\d+)\s+of\s+(\d+)\b/i);
   if (trialMatch) {
-    result.trialsCorrect = parseInt(trialMatch[1]);
-    result.trialsTotal = parseInt(trialMatch[2]);
-    result.accuracy = Math.round((result.trialsCorrect / result.trialsTotal) * 100);
+    const c = parseInt(trialMatch[1]);
+    const t = parseInt(trialMatch[2]);
+    // Sanity check: correct ≤ total, and total is a realistic trial count (≤ 200)
+    if (c <= t && t <= 200 && t > 0) {
+      result.trialsCorrect = c;
+      result.trialsTotal   = t;
+      result.accuracy = Math.round((c / t) * 100);
+    }
   }
   if (result.accuracy == null) {
     const pct = text.match(/(\d{1,3})\s*%/);
@@ -180,6 +189,16 @@ function extractFromText(text: string): ExtractedData {
   return result;
 }
 
+// Common English stop words to ignore during goal keyword matching
+const STOP_WORDS = new Set([
+  "the","and","for","with","that","this","are","was","has","had","can","did",
+  "not","but","his","her","its","our","you","all","one","two","they","them",
+  "from","have","will","would","could","should","been","when","then","also",
+  "more","some","into","than","each","such","both","most","very","well","just",
+  "over","does","use","may","any","per","via","how","who","she","him","her",
+  "were","what","which","upon","using","during","across",
+]);
+
 /**
  * Extract clinical data from sentences in the transcript that mention a
  * specific goal by name / domain keyword.  Falls back to empty if nothing
@@ -189,18 +208,36 @@ function extractDataForGoal(transcript: string, goal: Goal): ExtractedData {
   if (!transcript.trim()) return {};
   const name = (goal.shortName ?? goal.goalText).toLowerCase();
   const domain = goal.domain.toLowerCase().replace(/_/g, " ");
-  const keywords = [...name.split(/\s+/).filter((w) => w.length > 2), domain];
-  // Split on sentence boundaries
+
+  // Build keyword list: words from the goal name with length ≥ 4, excluding stop words
+  const nameWords = name
+    .split(/\s+/)
+    .filter((w) => w.length >= 4 && !STOP_WORDS.has(w));
+
+  // Require word-boundary matches to avoid "art" matching "articulation"
+  function mentionsKeyword(sentence: string): boolean {
+    const sl = sentence.toLowerCase();
+    // Check domain (full phrase, word-boundary)
+    const domainRegex = new RegExp(`\\b${domain.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`, "i");
+    if (domainRegex.test(sl) && nameWords.some(w => sl.includes(w))) return true;
+    // Require at least 2 significant name words to match (or 1 if there's only 1)
+    const matches = nameWords.filter(w => new RegExp(`\\b${w.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`, "i").test(sl));
+    return nameWords.length === 1 ? matches.length >= 1 : matches.length >= 2;
+  }
+
   const sentences = transcript.split(/(?<=[.!?])\s+/);
 
-  // Find indices of keyword-matching sentences, then include the next 2 sentences
-  // as context — clinical notes often state the goal first, then performance data.
+  // Collect keyword-matching sentences; also include the immediately following
+  // sentence IF it doesn't itself open a new goal topic (avoids number bleeding).
   const matchedIndices = new Set<number>();
   sentences.forEach((s, i) => {
-    if (keywords.some((kw) => s.toLowerCase().includes(kw))) {
+    if (mentionsKeyword(s)) {
       matchedIndices.add(i);
-      if (i + 1 < sentences.length) matchedIndices.add(i + 1);
-      if (i + 2 < sentences.length) matchedIndices.add(i + 2);
+      // Only grab the very next sentence as performance data context —
+      // skip it if it also mentions a keyword (it probably belongs to the next goal)
+      if (i + 1 < sentences.length && !mentionsKeyword(sentences[i + 1])) {
+        matchedIndices.add(i + 1);
+      }
     }
   });
 
