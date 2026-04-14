@@ -2756,159 +2756,43 @@ export function SessionNotePage({
                   }}
                 />
 
-                {/* Note display — preview mode (inference highlights) or plain textarea */}
+                {/* Note textarea */}
                 <div className="space-y-1.5">
-                  {notePreviewMode && noteDraft ? (
-                    <>
-                      {/* Rendered preview with per-inference hover-accept */}
-                      <div
-                        className="text-sm leading-relaxed font-sans rounded-md border border-input bg-background px-3 py-2 whitespace-pre-wrap"
-                        style={{ minHeight: (showAiChat || showTextChat || showSuggestEdits) ? "18rem" : "14rem" }}
-                      >
-                        {(() => {
-                          const parts = noteDraft.split(/\*\*([^*]+)\*\*/g);
-                          let inferIdx = 0;
-                          return parts.map((part, i) => {
-                            if (i % 2 === 1) {
-                              const currentIdx = inferIdx++;
-                              const isEditing = editingInferenceIdx === currentIdx;
-                              return (
-                                <span key={i} className="inline">
-                                  {isEditing ? (
-                                    /* ── contentEditable span: truly inline, wraps with surrounding text ── */
-                                    <>
-                                      <span
-                                        ref={editingSpanRef}
-                                        contentEditable
-                                        suppressContentEditableWarning
-                                        // dangerouslySetInnerHTML sets initial value; React won't fight contentEditable after mount
-                                        dangerouslySetInnerHTML={{ __html: editingInferenceValue }}
-                                        autoFocus
-                                        onKeyDown={(e) => {
-                                          if (e.key === "Enter") { e.preventDefault(); confirmEditInference(currentIdx, e.currentTarget.textContent ?? ""); }
-                                          if (e.key === "Escape") { setEditingInferenceIdx(-1); setEditingInferenceValue(""); }
-                                        }}
-                                        className="bg-amber-50 text-amber-900 font-semibold rounded px-0.5 border-b-2 border-amber-400 focus:border-amber-600 focus:outline-none cursor-text"
-                                      />
-                                      <span className="inline-flex items-center gap-0.5 ml-0.5 align-middle">
-                                        <button
-                                          title="Confirm"
-                                          onClick={(e) => { e.stopPropagation(); confirmEditInference(currentIdx, editingSpanRef.current?.textContent ?? ""); }}
-                                          className="inline-flex items-center justify-center h-4 w-4 rounded bg-emerald-100 text-emerald-700 border border-emerald-200 hover:bg-emerald-200 transition-colors"
-                                        >
-                                          <Check className="h-2.5 w-2.5" />
-                                        </button>
-                                        <button
-                                          title="Cancel"
-                                          onClick={(e) => { e.stopPropagation(); setEditingInferenceIdx(-1); setEditingInferenceValue(""); }}
-                                          className="inline-flex items-center justify-center h-4 w-4 rounded bg-muted text-muted-foreground border border-border hover:bg-muted/80 transition-colors"
-                                        >
-                                          <X className="h-2.5 w-2.5" />
-                                        </button>
-                                      </span>
-                                    </>
-                                  ) : (
-                                    /* ── Static highlight + action chips ── */
-                                    <>
-                                      <mark className="bg-amber-100 text-amber-900 rounded px-0.5 font-semibold not-italic">
-                                        {part}
-                                      </mark>
-                                      <span className="inline-flex items-center gap-0.5 ml-0.5 align-middle">
-                                        <button
-                                          title="Accept"
-                                          onClick={(e) => { e.stopPropagation(); acceptInference(currentIdx); }}
-                                          className="inline-flex items-center justify-center h-4 w-4 rounded bg-emerald-50 text-emerald-600 border border-emerald-200 hover:bg-emerald-100 transition-colors"
-                                        >
-                                          <Check className="h-2.5 w-2.5" />
-                                        </button>
-                                        <button
-                                          title="Edit"
-                                          onClick={(e) => { e.stopPropagation(); startEditInference(currentIdx, part); }}
-                                          className="inline-flex items-center justify-center h-4 w-4 rounded bg-blue-50 text-blue-600 border border-blue-200 hover:bg-blue-100 transition-colors"
-                                        >
-                                          <Pencil className="h-2.5 w-2.5" />
-                                        </button>
-                                        <button
-                                          title="Deny"
-                                          onClick={(e) => { e.stopPropagation(); denyInference(currentIdx); }}
-                                          className="inline-flex items-center justify-center h-4 w-4 rounded bg-red-50 text-red-500 border border-red-200 hover:bg-red-100 transition-colors"
-                                        >
-                                          <X className="h-2.5 w-2.5" />
-                                        </button>
-                                      </span>
-                                    </>
-                                  )}
-                                </span>
-                              );
-                            }
-                            return <span key={i}>{part}</span>;
-                          });
-                        })()}
-                      </div>
-                      {/* Preview action row */}
-                      <div className="flex items-center gap-2">
-                        <span className="text-xs text-amber-700 flex items-center gap-1">
-                          <Sparkles className="h-3 w-3" />
-                          Use ✓ accept, ✏ edit, or ✗ deny on each highlighted phrase
-                        </span>
-                        <button
-                          className="ml-auto text-xs text-muted-foreground hover:text-foreground flex items-center gap-1 transition-colors"
-                          onClick={() => {
-                            const clean = noteDraft.replace(/\*\*([^*]+)\*\*/g, "$1");
-                            handleNoteChange(clean);
-                          }}
-                        >
-                          <Check className="h-3 w-3" />
-                          Accept all
-                        </button>
-                        <button
-                          className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-1 transition-colors"
-                          onClick={() => setNotePreviewMode(false)}
-                        >
-                          <Pencil className="h-3 w-3" />
-                          Edit
-                        </button>
-                      </div>
-                    </>
-                  ) : (
-                    <>
-                      <Textarea
-                        value={noteDraft}
-                        onChange={(e) => handleNoteChange(e.target.value)}
-                        placeholder={
-                          generating
-                            ? "Generating note draft…"
-                            : "Record your session above, or click Generate to draft from goal data."
-                        }
-                        rows={(showAiChat || showTextChat || showSuggestEdits) ? 12 : 10}
-                        className="resize-y text-sm leading-relaxed font-sans"
-                        disabled={generating}
-                      />
-                      <div className="flex items-center justify-between">
-                        {noteDraft && (
-                          <span className="text-xs text-muted-foreground/70 italic flex items-center gap-1">
-                            <Bot className="h-3 w-3" />
-                            AI-generated — review and edit before saving
-                          </span>
-                        )}
-                        <span
-                          className={cn(
-                            "text-xs ml-auto transition-colors",
-                            noteStatus === "saved" ? "text-green-600" : "text-muted-foreground"
-                          )}
-                        >
-                          {noteStatus === "saving" && "Saving…"}
-                          {noteStatus === "saved" && "Draft saved ✓"}
-                        </span>
-                      </div>
-                    </>
-                  )}
+                  <Textarea
+                    value={noteDraft}
+                    onChange={(e) => handleNoteChange(e.target.value)}
+                    placeholder={
+                      generating
+                        ? "Generating note draft…"
+                        : "Record your session above, or click Generate to draft from goal data."
+                    }
+                    rows={(showAiChat || showTextChat || showSuggestEdits) ? 12 : 10}
+                    className="resize-y text-sm leading-relaxed font-sans"
+                    disabled={generating}
+                  />
+                  <div className="flex items-center justify-between">
+                    {noteDraft && (
+                      <span className="text-xs text-muted-foreground/70 italic flex items-center gap-1">
+                        <Bot className="h-3 w-3" />
+                        AI-generated — review and edit before saving
+                      </span>
+                    )}
+                    <span
+                      className={cn(
+                        "text-xs ml-auto transition-colors",
+                        noteStatus === "saved" ? "text-green-600" : "text-muted-foreground"
+                      )}
+                    >
+                      {noteStatus === "saving" && "Saving…"}
+                      {noteStatus === "saved" && "Draft saved ✓"}
+                    </span>
+                  </div>
                 </div>
 
                 {noteDraft && (
                   <div className="flex items-center gap-3 text-xs text-muted-foreground/70 border-t pt-3">
-                    <span>{noteDraft.replace(/\*\*([^*]+)\*\*/g, "$1").trim().split(/\s+/).filter(Boolean).length} words</span>
-                    {noteDraft.replace(/\*\*([^*]+)\*\*/g, "$1").trim().length < 30 && (
+                    <span>{noteDraft.trim().split(/\s+/).filter(Boolean).length} words</span>
+                    {noteDraft.trim().length < 30 && (
                       <span className="text-amber-600">Note is very short</span>
                     )}
                   </div>

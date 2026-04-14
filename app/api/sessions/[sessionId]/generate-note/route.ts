@@ -161,39 +161,12 @@ NOTE FORMAT — 2–4 paragraphs of narrative prose:
 
 STYLE RULES:
   — Past tense throughout
-  — No headers, bullets — plain prose only
+  — No headers, bullets, or any markdown formatting — plain prose only
+  — No asterisks, bold, italics, or special characters of any kind
   — Professional, objective, clinically appropriate — no filler, no AI-sounding phrases
   — Every sentence should carry clinical value
   — Read like something an experienced SLP would actually write
-
-INFERENCE MARKING — IMPORTANT:
-  Before marking, ask yourself for each phrase: "Did the SLP state this — in any words — in their recap or the structured data?"
-    — If YES (they said it, even informally): do NOT mark it, even if you rephrased it into clinical language.
-    — If NO (you concluded it, added it, or elaborated it yourself): MARK it with **double asterisks**.
-
-  ALWAYS mark:
-    — Clinical conclusions and interpretations not stated by the SLP
-        e.g. SLP said "he did well some days and not others" → you write **"performance was inconsistent across sessions, suggesting the skill has not yet generalized"** → MARK IT
-    — Trend statements or progress judgments you derived from the data
-        e.g. **"accuracy appears to be improving across sessions"** — mark this unless the SLP said "he's getting better"
-    — Plan / next steps you inferred or added without the SLP mentioning them
-        e.g. **"Continued practice in varied contexts is recommended"** → MARK IT
-    — Clinical elaborations that go beyond what the SLP described
-        e.g. SLP said "used flashcards" → you write **"structured drill using picture stimuli"** → MARK the elaboration
-    — Engagement or behavioral observations you added that the SLP did not mention
-
-  NEVER mark:
-    — Anything the SLP explicitly said, even if you cleaned up the phrasing
-        e.g. SLP said "I had to give a lot of verbal cues" → you write "required frequent verbal cues" → DO NOT MARK
-    — Specific numbers, accuracy percentages, trial counts, or cueing levels from the recap or structured data
-        e.g. SLP said "8 out of 10" → you write "8 of 10 trials correct" → DO NOT MARK
-    — Activities or tasks the SLP named directly
-        e.g. SLP said "we worked on /r/ in sentences" → you write "practiced /r/ production in sentence-level contexts" → DO NOT MARK
-    — Student name, session date, session type, duration — these are always factual, never marked
-
-  SPAN SIZE: Mark the smallest meaningful phrase that represents the inference — not entire sentences unless the whole sentence is your addition. A single sentence may have unmarked and marked spans side by side.
-
-  This is the ONLY markdown allowed — no headers, no bullets, no bold outside of inference marks.
+  — Only include information grounded in the SLP's recap or the structured data provided; do not fabricate specific numbers or invent details not present in the input
 
 Output ONLY the note text — no preamble, no labels, no JSON.`;
 }
@@ -237,8 +210,11 @@ export async function POST(
       messages: [{ role: "user", content: buildPrompt(body) }],
     });
 
-    const draftNote =
+    const rawNote =
       message.content[0].type === "text" ? message.content[0].text.trim() : "";
+
+    // Strip any residual markdown bold/italic markers so the note is always clean plain text
+    const draftNote = rawNote.replace(/\*\*([^*]+)\*\*/g, "$1").replace(/\*([^*]+)\*/g, "$1");
 
     return NextResponse.json({ draftNote, sessionId });
   } catch (err) {
