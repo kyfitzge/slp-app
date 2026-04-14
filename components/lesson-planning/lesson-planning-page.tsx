@@ -715,7 +715,15 @@ export function LessonPlanningPage({ students }: Props) {
                     <div className="relative">
                       <button
                         onClick={() => setShowStudentPicker(p => !p)}
-                        className="flex items-center gap-1 text-xs text-muted-foreground border border-dashed border-border rounded-full px-2.5 py-0.5 hover:text-foreground hover:border-foreground/30 transition-colors"
+                        onDragOver={(e) => { e.preventDefault(); setDragOver("secondary"); }}
+                        onDragLeave={() => setDragOver(null)}
+                        onDrop={(e) => handleDrop(e, "secondary")}
+                        className={cn(
+                          "flex items-center gap-1 text-xs border border-dashed rounded-full px-2.5 py-0.5 transition-colors",
+                          dragOver === "secondary"
+                            ? "border-primary/60 bg-primary/5 text-primary"
+                            : "text-muted-foreground border-border hover:text-foreground hover:border-foreground/30"
+                        )}
                       >
                         <UserPlus className="h-3 w-3" />
                         Add student
@@ -743,23 +751,6 @@ export function LessonPlanningPage({ students }: Props) {
                           </div>
                         </div>
                       )}
-                    </div>
-                  )}
-                  {/* Drop zone hint */}
-                  {availableToAdd.length > 0 && (
-                    <div
-                      onDragOver={(e) => { e.preventDefault(); setDragOver("secondary"); }}
-                      onDragLeave={() => setDragOver(null)}
-                      onDrop={(e) => handleDrop(e, "secondary")}
-                      className={cn(
-                        "flex items-center gap-1.5 rounded-full border-2 border-dashed px-2.5 py-0.5 text-xs text-muted-foreground/60 transition-colors",
-                        dragOver === "secondary"
-                          ? "border-primary/50 bg-primary/5 text-primary"
-                          : "border-border/40"
-                      )}
-                    >
-                      <UserPlus className="h-3 w-3" />
-                      or drag here
                     </div>
                   )}
                 </div>
