@@ -83,12 +83,10 @@ const SESSION_TYPE_LABELS: Record<string, string> = {
   PARENT_CONFERENCE: "Parent Conf.",
 };
 
-// Time grid: 6 AM → 9 PM, 30 px per 30-min slot → 1 px/minute
+// Time grid: 6 AM → 9 PM
 const GRID_START = 6;
 const GRID_END   = 21;
-const SLOT_PX    = 30;
 const NUM_SLOTS  = (GRID_END - GRID_START) * 2; // 30 slots
-const GRID_H     = NUM_SLOTS * SLOT_PX;          // 900 px
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -98,8 +96,8 @@ function snap15(mins: number): number {
 }
 
 /** Convert a pixel offset from the top of the grid back to a HH:MM time string. */
-function pxToTime(px: number): string {
-  const totalMins = GRID_START * 60 + Math.max(0, px);
+function pxToTime(px: number, pxPerMin: number): string {
+  const totalMins = GRID_START * 60 + Math.max(0, px / pxPerMin);
   const h = Math.floor(totalMins / 60);
   const m = totalMins % 60;
   return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
@@ -388,7 +386,7 @@ function useCurrentTimePx(): number | null {
 }
 
 function TimeGridView({
-  days, sessions, dragOverSlot, draggingDurationMins, onDragOver, onDragLeave, onDrop, onDelete,
+  days, sessions, dragOverSlot, draggingDurationMins, slotPx, onDragOver, onDragLeave, onDrop, onDelete,
   draggingId, onSessionDragStart, onDragEnd,
   resizePreview, onResizeStart,
 }: {
@@ -396,6 +394,7 @@ function TimeGridView({
   sessions: CalendarSession[];
   dragOverSlot: string | null;
   draggingDurationMins: number;
+  slotPx: number;
   onDragOver: (e: React.DragEvent, key: string) => void;
   onDragLeave: () => void;
   onDrop: (e: React.DragEvent, date: Date, time: string) => void;
@@ -407,17 +406,19 @@ function TimeGridView({
   onResizeStart: (sessionId: string, edge: "top" | "bottom", originY: number, originTop: number, originDuration: number) => void;
 }) {
   const nowPx = useCurrentTimePx();
+  const pxPerMin  = slotPx / 30;
+  const gridH     = NUM_SLOTS * slotPx;
+  const slotPx15  = slotPx / 2;
 
   /** Compute which 15-min slot the cursor is over, snapping to the nearest 15 minutes. */
   function slotFromEvent(e: React.DragEvent): string {
     const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
     const y = Math.max(0, e.clientY - rect.top);
-    // 1px = 1min; snap to nearest 15-min increment
-    return pxToTime(snap15(y));
+    const snappedMins = snap15(y / pxPerMin);
+    return pxToTime(snappedMins * pxPerMin, pxPerMin);
   }
 
-  // 15-minute slot slots for highlight (4 per hour × 15 hours = 60 slots, 15px each)
-  const SLOT_PX_15 = 15;
+  // 15-minute slot slots for highlight (4 per hour × 15 hours = 60 slots)
   const NUM_SLOTS_15 = (GRID_END - GRID_START) * 4;
   const slots15 = Array.from({ length: NUM_SLOTS_15 }, (_, i) => i);
 
@@ -448,12 +449,12 @@ function TimeGridView({
         <div className="flex">
 
           {/* Time labels — even slots + one extra label at the grid's end hour */}
-          <div className="w-14 shrink-0 border-r relative" style={{ height: GRID_H + 8 }}>
+          <div className="w-14 shrink-0 border-r relative" style={{ height: gridH + 8 }}>
             {[...Array.from({ length: NUM_SLOTS }, (_, i) => i).filter(i => i % 2 === 0), NUM_SLOTS].map(i => (
               <div
                 key={i}
                 className="absolute right-2 text-xs text-muted-foreground whitespace-nowrap"
-                style={{ top: i * SLOT_PX - 7 }}
+                style={{ top: i * slotPx - 7 }}
               >
                 {fmtTimeLabel(slotToTime(i))}
               </div>
@@ -472,7 +473,7 @@ function TimeGridView({
               <div
                 key={day.toISOString()}
                 className="flex-1 border-l relative"
-                style={{ height: GRID_H }}
+                style={{ height: gridH }}
                 onDragOver={e => {
                   e.preventDefault();
                   onDragOver(e, `${dayKey}_${slotFromEvent(e)}`);
@@ -517,7 +518,7 @@ function TimeGridView({
                           isHour ? "border-border/60" : "border-border/35",
                           inRange && "bg-primary/15",
                         )}
-                        style={{ top: i * SLOT_PX_15, height: SLOT_PX_15 }}
+                        style={{ top: i * slotPx15, height: slotPx15 }}
                       />
                     );
                   });
@@ -527,7 +528,7 @@ function TimeGridView({
                 {isToday(day) && nowPx !== null && (
                   <div
                     className="absolute left-0 right-0 z-20 pointer-events-none"
-                    style={{ top: nowPx }}
+                    style={{ top: nowPx * pxPerMin }}
                   >
                     {/* Dot on the left edge */}
                     <div className="absolute -left-1 -top-1.5 w-2.5 h-2.5 rounded-full bg-red-500" />
@@ -556,7 +557,7 @@ function TimeGridView({
                           s.isCancelled && "opacity-40 line-through",
                           draggingId === s.id ? "opacity-30 ring-2 ring-primary/40" : "hover:opacity-85",
                         )}
-                        style={{ top: idx * (SLOT_PX + 2), height: SLOT_PX - 2 }}
+                        style={{ top: idx * (slotPx + 2), height: slotPx - 2 }}
                       >
                         <span className="font-medium truncate block">{names}</span>
                       </Link>
@@ -566,12 +567,12 @@ function TimeGridView({
 
                 {/* Timed sessions — positioned by start time */}
                 {timed.map(s => {
-                  const baseTop    = minsFromStart(s.startTime!);
-                  const baseDur    = Math.max(15, s.durationMins ?? 30);
+                  const baseTop    = minsFromStart(s.startTime!) * pxPerMin;
+                  const baseDur    = Math.max(15, s.durationMins ?? 30) * pxPerMin;
                   // Use live resize preview if this session is being resized
                   const isResizing = resizePreview?.sessionId === s.id;
                   const top    = isResizing ? resizePreview!.top    : baseTop;
-                  const height = isResizing ? resizePreview!.height : Math.max(SLOT_PX - 2, baseDur);
+                  const height = isResizing ? resizePreview!.height : Math.max(slotPx - 2, baseDur);
                   const color  = sessionColor(s);
                   const names  = s.sessionStudents.map(ss =>
                     `${ss.student.firstName} ${ss.student.lastName.charAt(0)}.`
@@ -624,7 +625,7 @@ function TimeGridView({
                           }}
                         >
                           <div className="font-medium truncate leading-tight pt-1">{names}</div>
-                          {height > 36 && (
+                          {height > slotPx && (
                             <div className="opacity-70 truncate leading-tight">{label}</div>
                           )}
                         </Link>
@@ -673,6 +674,9 @@ export function DashboardCalendar({ initialSessions, students = [] }: DashboardC
   const [view, setView]               = useState<ViewMode>("week");
   const [currentDate, setCurrentDate] = useState(new Date());
   const [sessions, setSessions]       = useState<CalendarSession[]>(initialSessions);
+  const [slotPx, setSlotPx]           = useState(60); // default: 2× zoom (original was 30)
+  const pxPerMin = slotPx / 30;
+  const gridH    = NUM_SLOTS * slotPx;
   const [loading, setLoading]         = useState(false);
   const [dragOverSlot, setDragOverSlot] = useState<string | null>(null);
 
@@ -846,26 +850,27 @@ export function DashboardCalendar({ initialSessions, students = [] }: DashboardC
     originDuration: number,
   ) {
     resizingRef.current = { sessionId, edge, originY, originTop, originDuration };
-    setResizePreview({ sessionId, top: originTop, height: Math.max(SLOT_PX - 2, originDuration) });
+    setResizePreview({ sessionId, top: originTop, height: Math.max(slotPx - 2, originDuration) });
   }
 
   useEffect(() => {
     function onMouseMove(e: MouseEvent) {
       const r = resizingRef.current;
       if (!r) return;
-      const deltaPx = e.clientY - r.originY; // 1px = 1min
+      const deltaPx = e.clientY - r.originY;
 
       let newTop: number;
       let newHeight: number;
 
       if (r.edge === "bottom") {
         newTop = r.originTop;
-        newHeight = Math.max(15, snap15(r.originDuration + deltaPx));
+        newHeight = Math.max(15 * pxPerMin, Math.round(snap15((r.originDuration + deltaPx) / pxPerMin) * pxPerMin));
       } else {
         // top handle: move the start, shrink/grow duration
         const rawTop = r.originTop + deltaPx;
-        newTop = Math.max(0, Math.min(GRID_H - 15, snap15(rawTop)));
-        newHeight = Math.max(15, r.originTop + r.originDuration - newTop);
+        const snappedMins = snap15(Math.max(0, rawTop / pxPerMin));
+        newTop = Math.min(gridH - 15 * pxPerMin, snappedMins * pxPerMin);
+        newHeight = Math.max(15 * pxPerMin, r.originTop + r.originDuration - newTop);
       }
 
       setResizePreview({ sessionId: r.sessionId, top: newTop, height: newHeight });
@@ -880,8 +885,8 @@ export function DashboardCalendar({ initialSessions, students = [] }: DashboardC
       }
 
       const { top, height } = resizePreview;
-      const newStartTime = pxToTime(top);
-      const newDuration  = Math.max(15, Math.round(height));
+      const newStartTime = pxToTime(top, pxPerMin);
+      const newDuration  = Math.max(15, Math.round(height / pxPerMin));
 
       // Optimistic update
       const prev = sessions.find(s => s.id === r.sessionId);
@@ -914,7 +919,7 @@ export function DashboardCalendar({ initialSessions, students = [] }: DashboardC
       window.removeEventListener("mouseup",   onMouseUp);
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [resizePreview, sessions]);
+  }, [resizePreview, sessions, slotPx, pxPerMin]);
 
   // ── Create session ─────────────────────────────────────────────────────────
 
@@ -1080,6 +1085,29 @@ export function DashboardCalendar({ initialSessions, students = [] }: DashboardC
           {loading && <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground shrink-0" />}
         </span>
 
+        {/* Zoom controls — only visible in day/week view */}
+        {view !== "month" && (
+          <div className="flex items-center rounded-md border overflow-hidden shrink-0">
+            <button
+              onClick={() => setSlotPx(p => Math.max(30, p - 15))}
+              disabled={slotPx <= 30}
+              className="px-2.5 py-1.5 text-xs font-medium bg-background text-muted-foreground hover:bg-muted disabled:opacity-30 disabled:cursor-not-allowed border-r"
+            >
+              −
+            </button>
+            <span className="px-2.5 py-1.5 text-xs font-medium bg-background text-muted-foreground select-none">
+              {Math.round(pxPerMin * 100)}%
+            </span>
+            <button
+              onClick={() => setSlotPx(p => Math.min(120, p + 15))}
+              disabled={slotPx >= 120}
+              className="px-2.5 py-1.5 text-xs font-medium bg-background text-muted-foreground hover:bg-muted disabled:opacity-30 disabled:cursor-not-allowed border-l"
+            >
+              +
+            </button>
+          </div>
+        )}
+
         {/* New session button */}
         <Button asChild variant="outline" size="sm" className="h-7 shrink-0 gap-1">
           <Link href="/sessions/new">
@@ -1111,6 +1139,7 @@ export function DashboardCalendar({ initialSessions, students = [] }: DashboardC
             sessions={sessions}
             dragOverSlot={dragOverSlot}
             draggingDurationMins={draggingDurationMins}
+            slotPx={slotPx}
             onDragOver={handleDragOver}
             onDragLeave={handleDragLeave}
             onDrop={handleDrop}
