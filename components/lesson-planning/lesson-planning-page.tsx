@@ -267,6 +267,7 @@ export function LessonPlanningPage({ students }: Props) {
   const [isDeleting, setIsDeleting] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
   const [loadingPlans, setLoadingPlans] = useState(false);
+  const [dragOver, setDragOver] = useState<"primary" | "secondary" | null>(null);
 
   // Form state
   const [sessionDate, setSessionDate] = useState(today);
@@ -465,6 +466,26 @@ export function LessonPlanningPage({ students }: Props) {
     setShowHistory(false);
   }
 
+  // ── Drop handler ──────────────────────────────────────────────────────────
+
+  function handleDrop(e: React.DragEvent, target: "primary" | "secondary") {
+    e.preventDefault();
+    setDragOver(null);
+    try {
+      const data = JSON.parse(e.dataTransfer.getData("application/json"));
+      const { studentId } = data;
+      if (!studentId) return;
+      if (target === "primary") {
+        // Dropping on primary slot: select this as primary student, clear secondary
+        void handleSelectStudent(studentId);
+      } else {
+        // Dropping on secondary slot: only allowed when primary is already set and this isn't the primary
+        if (!selectedStudentId || studentId === selectedStudentId) return;
+        handleAddSecondStudent(studentId);
+      }
+    } catch { /* ignore */ }
+  }
+
   // ── Render ─────────────────────────────────────────────────────────────────
 
   const planCountMeta = useMemo(() => {
@@ -502,6 +523,7 @@ export function LessonPlanningPage({ students }: Props) {
             <CaseloadSidePanel
               students={students}
               selectedId={selectedStudentId}
+              draggable
               onSelect={handleSelectStudent}
               getStudentMeta={(id) => {
                 const count = planCountMeta[id];
@@ -515,14 +537,22 @@ export function LessonPlanningPage({ students }: Props) {
         <div className="flex flex-col min-h-0 overflow-hidden rounded-xl border bg-card">
           {!selectedStudent ? (
             /* Empty state */
-            <div className="flex-1 flex flex-col items-center justify-center gap-4 text-center p-12">
+            <div
+              onDragOver={(e) => { e.preventDefault(); setDragOver("primary"); }}
+              onDragLeave={() => setDragOver(null)}
+              onDrop={(e) => handleDrop(e, "primary")}
+              className={cn(
+                "flex-1 flex flex-col items-center justify-center gap-4 text-center p-12 transition-colors",
+                dragOver === "primary" && "ring-2 ring-dashed ring-primary/50 bg-primary/5"
+              )}
+            >
               <div className="w-16 h-16 rounded-2xl bg-primary/10 flex items-center justify-center">
                 <BookOpen className="h-8 w-8 text-primary/60" />
               </div>
               <div>
-                <p className="text-sm font-medium text-muted-foreground mb-1">Select a student to start planning</p>
+                <p className="text-sm font-medium text-muted-foreground mb-1">Select a student or drag one here</p>
                 <p className="text-xs text-muted-foreground max-w-xs">
-                  Choose a student from the caseload to create AI-powered lesson plans based on their IEP goals and session data.
+                  Drag a student from the caseload to get started.
                 </p>
               </div>
             </div>
@@ -676,6 +706,24 @@ export function LessonPlanningPage({ students }: Props) {
                 )}
               </div>
             </div>
+
+            {/* ── Secondary student drop zone ── */}
+            {!selectedStudent2 && (
+              <div
+                onDragOver={(e) => { e.preventDefault(); setDragOver("secondary"); }}
+                onDragLeave={() => setDragOver(null)}
+                onDrop={(e) => handleDrop(e, "secondary")}
+                className={cn(
+                  "mx-6 mt-3 rounded-lg border-2 border-dashed px-4 py-2 text-center text-xs text-muted-foreground transition-colors shrink-0",
+                  dragOver === "secondary"
+                    ? "border-primary/60 bg-primary/5 text-primary"
+                    : "border-border/50 hover:border-border"
+                )}
+              >
+                <UserPlus className="h-3.5 w-3.5 inline mr-1.5 opacity-60" />
+                Drop a student here to add to this group session
+              </div>
+            )}
 
             {/* ── Active goal chips ── */}
             {(selectedStudent.goals.filter(g => g.status === "ACTIVE").length > 0 ||

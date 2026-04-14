@@ -142,7 +142,7 @@ export function CaseloadSidePanel({
                     <span
                       className={cn(
                         "text-sm font-medium truncate block",
-                        isSelected && !draggable ? "text-primary" : "text-foreground"
+                        isSelected && (!draggable || !!onSelect) ? "text-primary" : "text-foreground"
                       )}
                     >
                       {student.lastName}, {student.firstName}
@@ -173,7 +173,7 @@ export function CaseloadSidePanel({
                     <ChevronRight
                       className={cn(
                         "h-3.5 w-3.5 transition-colors",
-                        isSelected && !draggable
+                        isSelected && (!draggable || !!onSelect)
                           ? "text-primary"
                           : "text-muted-foreground/40 group-hover:text-muted-foreground"
                       )}
@@ -181,6 +181,33 @@ export function CaseloadSidePanel({
                   </div>
                 </div>
               );
+
+              if (draggable && onSelect) {
+                // Combined mode: draggable button that also fires onSelect on click
+                return (
+                  <button
+                    key={student.id}
+                    draggable
+                    onDragStart={(e) => {
+                      e.dataTransfer.setData(
+                        "application/json",
+                        JSON.stringify({
+                          studentId: student.id,
+                          studentName: `${student.firstName} ${student.lastName}`,
+                        })
+                      );
+                      e.dataTransfer.effectAllowed = "copy";
+                    }}
+                    onClick={() => onSelect(student.id)}
+                    className={cn(
+                      "group w-full flex items-center px-2 py-2.5 rounded-md transition-colors text-left cursor-grab active:cursor-grabbing",
+                      isSelected ? "bg-primary/10" : "hover:bg-muted/40"
+                    )}
+                  >
+                    {innerContent}
+                  </button>
+                );
+              }
 
               if (draggable) {
                 return (
