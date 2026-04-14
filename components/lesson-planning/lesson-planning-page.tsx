@@ -243,9 +243,9 @@ function GoalChip({ goal }: { goal: StudentOption["goals"][0] }) {
   const colorClass = DOMAIN_COLORS[goal.domain] ?? "bg-gray-100 text-gray-700";
   const name = goal.shortName ?? goal.goalText.slice(0, 40);
   return (
-    <div className={cn("rounded-lg px-3 py-2 text-xs shrink-0 max-w-[180px]", colorClass)}>
+    <div className={cn("rounded-lg px-3 py-2 text-xs shrink-0 w-[172px]", colorClass)}>
       <div className="font-semibold truncate">{name}</div>
-      <div className="opacity-70 mt-0.5">{domainLabel} · {Math.round(goal.targetAccuracy)}% target</div>
+      <div className="opacity-70 mt-0.5 truncate">{domainLabel} · {Math.round(goal.targetAccuracy)}% target</div>
     </div>
   );
 }
