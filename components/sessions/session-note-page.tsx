@@ -902,7 +902,7 @@ function AiChatPanel({
       const json = await res.json();
       if (!res.ok) throw new Error(json.error ?? "Transcription failed");
 
-      const transcript: string = (json.transcript ?? json.text ?? "").trim();
+      const transcript: string = (json.rawTranscript ?? json.transcript ?? json.text ?? "").trim();
       if (!transcript) {
         setStatusMsg("Didn't catch that — tap the mic and try again.");
         setVoiceState("idle");
