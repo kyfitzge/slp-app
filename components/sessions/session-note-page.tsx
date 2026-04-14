@@ -159,14 +159,21 @@ function extractFromText(text: string): ExtractedData {
     if (pct) result.accuracy = parseInt(pct[1]);
   }
 
-  if (/\bindependen/i.test(text)) result.cueingLevel = "INDEPENDENT";
-  else if (/min(?:imal)?\s*(?:verbal\s*)?cue|indirect\s*verbal/i.test(text))
-    result.cueingLevel = "INDIRECT_VERBAL";
-  else if (/mod(?:erate)?\s*(?:verbal\s*)?cue|direct\s*verbal/i.test(text))
-    result.cueingLevel = "DIRECT_VERBAL";
-  else if (/max(?:imum)?\s*(?:support|assist)|physical\s*(?:guidance|cue|prompt)/i.test(text))
+  // Cueing level — ordered most-specific → least-specific so generic terms don't shadow specific ones
+  if (/\bindependen|\bno\s+cues?\b|\bwithout\s+(?:cues?|prompts?|assist\w*|support)|\bcue[- ]?free/i.test(text))
+    result.cueingLevel = "INDEPENDENT";
+  else if (/hand[- ]?over[- ]?hand|physical\s*(?:guidance|cue|prompt|assist)/i.test(text))
+    result.cueingLevel = "PHYSICAL";
+  else if (/max(?:imum|imal)?\s*(?:verbal\s*)?(?:cues?|prompts?|support|assist\w*|cueing)|extensive\s*(?:cues?|support)|substantial\s*support|required\s*constant\s*(?:cues?|support)/i.test(text))
     result.cueingLevel = "MAXIMUM_ASSISTANCE";
-  else if (/gestural\s*cue/i.test(text)) result.cueingLevel = "GESTURAL";
+  else if (/\bmodeling\b|\bmodel(?:ed|ing)?\s*(?:cue|prompt)|\bimitat/i.test(text))
+    result.cueingLevel = "MODELING";
+  else if (/min(?:imal)?\s*(?:verbal\s*)?(?:cues?|prompts?|support|cueing)|indirect\s*verbal|light\s*(?:verbal\s*)?(?:cues?|prompts?)/i.test(text))
+    result.cueingLevel = "INDIRECT_VERBAL";
+  else if (/mod(?:erate)?\s*(?:verbal\s*)?(?:cues?|prompts?|support|cueing)|direct\s*verbal|frequent\s*(?:verbal\s*)?(?:cues?|prompts?)|verbal\s*(?:cues?|prompts?|cueing)|required\s*(?:verbal\s*)?(?:cues?|prompts?)|with\s*verbal\s*(?:cues?|prompts?)|provided\s*(?:verbal\s*)?(?:cues?|prompts?)/i.test(text))
+    result.cueingLevel = "DIRECT_VERBAL";
+  else if (/gestural\s*(?:cue|prompt)|visual\s*(?:cue|prompt)|\bgesture/i.test(text))
+    result.cueingLevel = "GESTURAL";
 
   const dur = text.match(/(\d+)\s*-?\s*min(?:ute)?s?\b/i);
   if (dur) result.durationMins = parseInt(dur[1]);
@@ -2060,13 +2067,6 @@ export function SessionNotePage({
   );
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   const noteDebouncRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  /** true when the note was just AI-generated and still contains **inference** markers */
-  const [notePreviewMode, setNotePreviewMode] = useState(false);
-  /** Index of the inference span currently being edited inline (-1 = none) */
-  const [editingInferenceIdx, setEditingInferenceIdx] = useState(-1);
-  const [editingInferenceValue, setEditingInferenceValue] = useState("");
-  const editingSpanRef = useRef<HTMLSpanElement>(null);
-
   /** Build the goals payload for a single generate-note call. */
   function buildGoalsForNote(context: string, goals: Goal[]): {
     name: string; accuracy: number | null; trialsCorrect: number | null;
@@ -2137,13 +2137,13 @@ export function SessionNotePage({
 
         // Drive UI state off the active student's draft
         const activeDraft = newDrafts[activeStudentId] ?? "";
-        const cleanActive = activeDraft.replace(/\*\*([^*]+)\*\*/g, "$1");
-        setNoteExtractionContext(cleanActive);
+        setNoteExtractionContext(activeDraft);
         setGeneratedAt(new Date());
         setHasUnsavedChanges(true);
-        setNotePreviewMode(Object.values(newDrafts).some((d) => /\*\*[^*]+\*\*/.test(d)));
         toast.success("Notes generated for all students");
-        extractStructuredData(cleanActive);
+        // Run LLM extraction against ALL students' notes so every goal gets data regardless of active tab
+        const allNotesText = Object.values(newDrafts).filter(Boolean).join("\n\n");
+        extractStructuredData(allNotesText);
         return;
       }
 
@@ -2173,13 +2173,11 @@ export function SessionNotePage({
       if (!res.ok) throw new Error(json.error ?? "Generation failed");
       const draft: string = json.draftNote;
       setNoteDraft(draft);
-      const cleanDraft = draft.replace(/\*\*([^*]+)\*\*/g, "$1");
-      setNoteExtractionContext(cleanDraft);
+      setNoteExtractionContext(draft);
       setGeneratedAt(new Date());
       setHasUnsavedChanges(true);
-      setNotePreviewMode(/\*\*[^*]+\*\*/.test(draft));
       toast.success("Note generated");
-      extractStructuredData(cleanDraft);
+      extractStructuredData(draft);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Failed to generate note");
     } finally {
@@ -2187,10 +2185,10 @@ export function SessionNotePage({
     }
   }
 
-  /** Persist the note draft to the DB. Always strips inference markers before saving. */
+  /** Persist the note draft to the DB. */
   async function persistNote(note: string) {
     if (!note.trim()) return;
-    const cleanNote = note.replace(/\*\*([^*]+)\*\*/g, "$1");
+    const cleanNote = note.trim();
     setNoteStatus("saving");
     try {
       const noteBody: { noteText: string; studentId?: string } = { noteText: cleanNote };
@@ -2213,8 +2211,7 @@ export function SessionNotePage({
     setNoteDraft(text);
     setNoteStatus("idle");
     setHasUnsavedChanges(true);
-    setNotePreviewMode(false);
-    setNoteExtractionContext(text.replace(/\*\*([^*]+)\*\*/g, "$1"));
+    setNoteExtractionContext(text);
 
     // If the note is fully cleared, reset all derived/extracted data so the
     // structured session data panel clears out too.
@@ -2237,105 +2234,6 @@ export function SessionNotePage({
         extractStructuredData(combined);
       }
     }, 1500);
-  }
-
-  /** Shared helper: after mutating noteDraft, exit preview mode if no markers remain. */
-  function afterInferenceChange(newDraft: string) {
-    setNoteDraft(newDraft);
-    setHasUnsavedChanges(true);
-    if (!/\*\*[^*]+\*\*/.test(newDraft)) {
-      setNotePreviewMode(false);
-      setNoteExtractionContext(newDraft);
-    }
-  }
-
-  /** Accept a single inferred span — keeps the text, removes markers. */
-  function acceptInference(idx: number) {
-    let count = 0;
-    const newDraft = noteDraft.replace(/\*\*([^*]+)\*\*/g, (match, content) => {
-      const result = count === idx ? content : match;
-      count++;
-      return result;
-    });
-    afterInferenceChange(newDraft);
-  }
-
-  /** Deny a single inferred span — removes the entire sentence containing it. */
-  function denyInference(idx: number) {
-    const text = noteDraft;
-
-    // Locate the nth **...** marker
-    let count = 0;
-    let markerStart = -1;
-    let markerEnd = -1;
-    text.replace(/\*\*([^*]+)\*\*/g, (match, _c, offset) => {
-      if (count === idx) { markerStart = offset; markerEnd = offset + match.length; }
-      count++;
-      return match;
-    });
-    if (markerStart === -1) return;
-
-    // ── Find sentence start ──────────────────────────────────────────────────
-    // Scan backward from markerStart; stop after .!? or \n
-    let sentStart = 0;
-    for (let i = markerStart - 1; i >= 0; i--) {
-      if (/[.!?]/.test(text[i])) {
-        // Start of our sentence is right after this punctuation + any spaces
-        let j = i + 1;
-        while (j < markerStart && text[j] === ' ') j++;
-        sentStart = j;
-        break;
-      }
-      if (text[i] === '\n') {
-        sentStart = i + 1;
-        break;
-      }
-    }
-
-    // ── Find sentence end ────────────────────────────────────────────────────
-    // Scan forward from markerStart (period may be inside the marker)
-    let sentEnd = text.length;
-    for (let i = markerStart; i < text.length; i++) {
-      if (/[.!?]/.test(text[i])) {
-        sentEnd = i + 1;
-        // Consume trailing spaces (preserve paragraph newlines)
-        while (sentEnd < text.length && text[sentEnd] === ' ') sentEnd++;
-        // Ensure we've gone past the closing ** of the marker
-        if (sentEnd < markerEnd) sentEnd = markerEnd;
-        break;
-      }
-      if (text[i] === '\n' && i >= markerEnd) {
-        sentEnd = i + 1;
-        break;
-      }
-    }
-
-    // ── Remove sentence and clean up extra blank lines ────────────────────────
-    const newDraft = (text.slice(0, sentStart) + text.slice(sentEnd))
-      .replace(/\n{3,}/g, '\n\n')
-      .replace(/^ +/gm, (m, offset) => offset === 0 ? '' : m) // trim leading spaces on first line
-      .trim();
-    afterInferenceChange(newDraft);
-  }
-
-  /** Begin inline editing of a single inferred span. */
-  function startEditInference(idx: number, currentText: string) {
-    setEditingInferenceIdx(idx);
-    setEditingInferenceValue(currentText);
-  }
-
-  /** Confirm the inline edit — replaces the span with the edited plain text. */
-  function confirmEditInference(idx: number, textOverride?: string) {
-    const replacement = (textOverride ?? editingSpanRef.current?.textContent ?? editingInferenceValue).trim();
-    let count = 0;
-    const newDraft = noteDraft.replace(/\*\*([^*]+)\*\*/g, (match) => {
-      const result = count === idx ? replacement : match;
-      count++;
-      return result;
-    });
-    setEditingInferenceIdx(-1);
-    setEditingInferenceValue("");
-    afterInferenceChange(newDraft);
   }
 
   /** Merge new information into the existing note without rewriting it. */
