@@ -545,9 +545,6 @@ function TimeGridView({
                 {/* Untimed sessions — stacked at the very top */}
                 {untimed.map((s, idx) => {
                   const color = sessionColor(s);
-                  const names = s.sessionStudents.map(ss =>
-                    `${ss.student.firstName} ${ss.student.lastName.charAt(0)}.`
-                  ).join(", ");
                   const isDropTarget = dropTargetSessionId === s.id;
                   return (
                     <SessionEventMenu key={s.id} session={s} onDelete={onDelete}>
@@ -575,7 +572,13 @@ function TimeGridView({
                         )}
                         style={{ top: idx * (slotPx + 2), height: slotPx - 2 }}
                       >
-                        <span className="font-medium truncate block">{names}</span>
+                        <div className="font-medium leading-tight space-y-px">
+                          {s.sessionStudents.map(ss => (
+                            <div key={ss.student.id} className="truncate">
+                              {ss.student.firstName} {ss.student.lastName.charAt(0)}.
+                            </div>
+                          ))}
+                        </div>
                         {isDropTarget && (
                           <span className="absolute inset-0 flex items-center justify-center bg-primary/10 rounded text-primary font-semibold pointer-events-none">
                             + Add student
@@ -595,9 +598,6 @@ function TimeGridView({
                   const top    = isResizing ? resizePreview!.top    : baseTop;
                   const height = isResizing ? resizePreview!.height : Math.max(slotPx - 2, baseDur);
                   const color  = sessionColor(s);
-                  const names  = s.sessionStudents.map(ss =>
-                    `${ss.student.firstName} ${ss.student.lastName.charAt(0)}.`
-                  ).join(", ");
                   const label  = SESSION_TYPE_LABELS[s.sessionType] ?? s.sessionType;
                   const isDropTarget = dropTargetSessionId === s.id;
                   return (
@@ -656,7 +656,13 @@ function TimeGridView({
                             if (draggingId === s.id) e.preventDefault();
                           }}
                         >
-                          <div className="font-medium truncate leading-tight pt-1">{names}</div>
+                          <div className="font-medium leading-tight pt-1 space-y-px">
+                            {s.sessionStudents.map(ss => (
+                              <div key={ss.student.id} className="truncate">
+                                {ss.student.firstName} {ss.student.lastName.charAt(0)}.
+                              </div>
+                            ))}
+                          </div>
                           {height > slotPx && (
                             <div className="opacity-70 truncate leading-tight">{label}</div>
                           )}
