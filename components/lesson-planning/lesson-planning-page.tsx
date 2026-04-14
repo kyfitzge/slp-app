@@ -305,6 +305,15 @@ export function LessonPlanningPage({ students }: Props) {
 
   // ── Student selection ──────────────────────────────────────────────────────
 
+  function handleClearPrimary() {
+    setSelectedStudentId(null);
+    setAdditionalStudentIds([]);
+    setActivePlan(null);
+    setPlanText("");
+    setShowHistory(false);
+    setShowStudentPicker(false);
+  }
+
   async function handleSelectStudent(id: string) {
     if (id === selectedStudentId) return;
     setSelectedStudentId(id);
@@ -677,8 +686,15 @@ export function LessonPlanningPage({ students }: Props) {
 
                 {/* ── Student group management ── */}
                 <div className="shrink-0 flex items-center gap-2 flex-wrap">
-                  <span className="text-sm font-medium text-foreground">
+                  <span className="flex items-center gap-1 rounded-full bg-muted px-2.5 py-0.5 text-xs font-medium">
                     {selectedStudent.firstName} {selectedStudent.lastName}
+                    <button
+                      onClick={handleClearPrimary}
+                      className="ml-0.5 text-muted-foreground hover:text-foreground transition-colors"
+                      title="Remove student"
+                    >
+                      <X className="h-3 w-3" />
+                    </button>
                   </span>
                   {additionalStudents.map(s => (
                     <span key={s.id} className="flex items-center gap-1">
