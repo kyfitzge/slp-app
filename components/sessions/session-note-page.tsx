@@ -1806,7 +1806,12 @@ export function SessionNotePage({
       toast.error("Failed to save session type");
     }
   }
-  const activeContext = summaryContext || noteExtractionContext;
+  // For group sessions combine all students' note drafts so goal extraction works
+  // for every student's goals, not just whoever's tab is currently active.
+  const combinedNoteDrafts = isGroup
+    ? Object.values(studentNoteDrafts).filter(Boolean).join("\n\n")
+    : noteDraft;
+  const activeContext = summaryContext || combinedNoteDrafts || noteExtractionContext;
 
   const extracted = useMemo<ExtractedData>(() => {
     const fromContext = extractFromText(activeContext);
@@ -1838,8 +1843,8 @@ export function SessionNotePage({
     // Match goals from ALL available text sources — transcript, note draft, and extraction context
     const fromTranscript = summaryContext.trim()
       ? matchGoalsFromTranscript(summaryContext, allGoals) : [];
-    const fromNote = noteDraft.trim()
-      ? matchGoalsFromTranscript(noteDraft, allGoals) : [];
+    const fromNote = combinedNoteDrafts.trim()
+      ? matchGoalsFromTranscript(combinedNoteDrafts, allGoals) : [];
     const fromExtraction = noteExtractionContext.trim()
       ? matchGoalsFromTranscript(noteExtractionContext, allGoals) : [];
 
@@ -1863,15 +1868,15 @@ export function SessionNotePage({
 
     return goals.map((goal) => {
       const fromContext = extractDataForGoal(activeContext, goal);
-      // Also scan the note draft — AI-generated notes often contain data not in the raw transcript
-      const fromNote = noteDraft.trim() ? extractDataForGoal(noteDraft, goal) : {};
+      // Also scan the note draft(s) — AI-generated notes often contain data not in the raw transcript
+      const fromNote = combinedNoteDrafts.trim() ? extractDataForGoal(combinedNoteDrafts, goal) : {};
       const extracted: ExtractedData = {
         ...fromNote,
         ...Object.fromEntries(Object.entries(fromContext).filter(([, v]) => v != null)),
       };
       return { goal, extracted, saved: initialGoalData[goal.id] };
     });
-  }, [summaryContext, noteExtractionContext, activeContext, noteDraft, allGoals, initialGoalData]);
+  }, [summaryContext, noteExtractionContext, activeContext, noteDraft, combinedNoteDrafts, allGoals, initialGoalData]);
 
   // ── LLM-extracted structured data (keyed by goalId) ────────────────────────
   const [aiExtractions, setAiExtractions] = useState<Record<string, GoalAIExt>>({});
@@ -2325,6 +2330,59 @@ export function SessionNotePage({
   if (anyPresent && matchedGoals.length > 0 && !hasAnyGoalCueing) missingLabels.push("Level of Support");
 
   const allFieldsCaptured = missingLabels.length === 0;
+
+  /** Render an editable data card for a single matched goal. */
+  function renderGoalCard(mg: MatchedGoalData) {
+    const aiExt  = aiExtractions[mg.goal.id];
+    const ovride = goalOverrides[mg.goal.id];
+    const acc    = goalEffectiveAccuracy(mg, aiExt, ovride);
+    const trials = goalEffectiveTrials(mg,   aiExt, ovride);
+    const cueing = goalEffectiveCueing(mg,   aiExt, ovride);
+    const goalLabel = mg.goal.shortName ?? mg.goal.goalText.slice(0, 50);
+    const rawAcc    = ovride?.accuracy != null ? String(ovride.accuracy)
+                    : aiExt?.accuracy != null  ? String(aiExt.accuracy)
+                    : acc != null              ? String(acc) : "";
+    const rawTrials = ovride?.trialsCorrect != null ? `${ovride.trialsCorrect}/${ovride.trialsTotal}`
+                    : aiExt?.trialsCorrect != null  ? `${aiExt.trialsCorrect}/${aiExt.trialsTotal}`
+                    : trials ?? "";
+    const rawCueing = ovride?.cueingLevel !== undefined ? (ovride.cueingLevel ?? "")
+                    : aiExt?.cueingLevel              ?? cueing ?? "";
+    return (
+      <div key={mg.goal.id}>
+        <p className="text-xs font-medium text-foreground mb-1.5 flex items-center gap-1.5">
+          <Target className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+          {goalLabel}
+        </p>
+        <div className="rounded-lg border divide-y">
+          <EditableFieldRow
+            label="Accuracy"
+            rawValue={rawAcc}
+            displayValue={acc != null ? `${acc}%` : null}
+            missing={acc == null}
+            placeholder="e.g. 80"
+            onSave={(v) => saveGoalOverride(mg.goal.id, "accuracy", v)}
+          />
+          <EditableFieldRow
+            label="Number of Trials"
+            rawValue={rawTrials}
+            displayValue={trials}
+            missing={!trials}
+            placeholder="e.g. 8/10"
+            onSave={(v) => saveGoalOverride(mg.goal.id, "trials", v)}
+          />
+          <EditableFieldRow
+            label="Level of Support"
+            rawValue={rawCueing}
+            displayValue={cueing ? CUEING_LABELS[cueing] ?? cueing : null}
+            missing={!cueing}
+            editType="select"
+            editOptions={Object.entries(CUEING_LABELS).map(([v, l]) => ({ value: v, label: l }))}
+            onSave={(v) => saveGoalOverride(mg.goal.id, "cueingLevel", v)}
+          />
+        </div>
+      </div>
+    );
+  }
 
   // ─── Render ───────────────────────────────────────────────────────────────
 
@@ -2832,78 +2890,50 @@ export function SessionNotePage({
                 </div>
               </div>
 
-              {/* B. Clinical Data — one sub-section per goal (always shown) */}
+              {/* B. Clinical Data */}
               <div>
                 <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">
                   B. Clinical Data
                 </p>
 
-                {matchedGoals.length === 0 ? (
-                  /* ── No goals on file ── */
+                {isGroup ? (
+                  /* ── Group session: one sub-section per student ── */
+                  <div className="space-y-5">
+                    {students.map((s) => {
+                      const studentGoals = matchedGoals.filter((mg) =>
+                        s.goals.some((g) => g.id === mg.goal.id)
+                      );
+                      return (
+                        <div key={s.id}>
+                          <p className="text-xs font-semibold text-foreground mb-2 flex items-center gap-1.5">
+                            <Users className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                            {s.firstName} {s.lastName}
+                          </p>
+                          {studentGoals.length === 0 ? (
+                            <p className="text-xs text-muted-foreground italic pl-5">
+                              No goals on file for this student.
+                            </p>
+                          ) : (
+                            <div className="space-y-3">
+                              {studentGoals.map((mg) => renderGoalCard(mg))}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                ) : matchedGoals.length === 0 ? (
+                  /* ── Single student, no goals ── */
                   <p className="text-xs text-muted-foreground italic">
                     No goals on file for this session.
                   </p>
                 ) : (
-                  /* ── One editable card per goal ── */
+                  /* ── Single student: flat goal list ── */
                   <div className="space-y-3">
-                    {matchedGoals.map((mg) => {
-                        const aiExt  = aiExtractions[mg.goal.id];
-                        const ovride = goalOverrides[mg.goal.id];
-                        const acc    = goalEffectiveAccuracy(mg, aiExt, ovride);
-                        const trials = goalEffectiveTrials(mg,   aiExt, ovride);
-                        const cueing = goalEffectiveCueing(mg,   aiExt, ovride);
-                        const goalLabel = mg.goal.shortName ?? mg.goal.goalText.slice(0, 50);
-
-                        // Raw strings for the inputs
-                        const rawAcc    = ovride?.accuracy != null ? String(ovride.accuracy)
-                                        : aiExt?.accuracy != null  ? String(aiExt.accuracy)
-                                        : acc != null              ? String(acc) : "";
-                        const rawTrials = ovride?.trialsCorrect != null ? `${ovride.trialsCorrect}/${ovride.trialsTotal}`
-                                        : aiExt?.trialsCorrect != null  ? `${aiExt.trialsCorrect}/${aiExt.trialsTotal}`
-                                        : trials ?? "";
-                        const rawCueing = ovride?.cueingLevel !== undefined ? (ovride.cueingLevel ?? "")
-                                        : aiExt?.cueingLevel              ?? cueing ?? "";
-
-                        return (
-                          <div key={mg.goal.id}>
-                            <p className="text-xs font-medium text-foreground mb-1.5 flex items-center gap-1.5">
-                              <Target className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-                              {goalLabel}
-                            </p>
-                            <div className="rounded-lg border divide-y">
-                              <EditableFieldRow
-                                label="Accuracy"
-                                rawValue={rawAcc}
-                                displayValue={acc != null ? `${acc}%` : null}
-                                missing={acc == null}
-                                placeholder="e.g. 80"
-                                onSave={(v) => saveGoalOverride(mg.goal.id, "accuracy", v)}
-                              />
-                              <EditableFieldRow
-                                label="Number of Trials"
-                                rawValue={rawTrials}
-                                displayValue={trials}
-                                missing={!trials}
-                                placeholder="e.g. 8/10"
-                                onSave={(v) => saveGoalOverride(mg.goal.id, "trials", v)}
-                              />
-                              <EditableFieldRow
-                                label="Level of Support"
-                                rawValue={rawCueing}
-                                displayValue={cueing ? CUEING_LABELS[cueing] ?? cueing : null}
-                                missing={!cueing}
-                                editType="select"
-                                editOptions={Object.entries(CUEING_LABELS).map(([v, l]) => ({ value: v, label: l }))}
-                                onSave={(v) => saveGoalOverride(mg.goal.id, "cueingLevel", v)}
-                              />
-                            </div>
-                          </div>
-                        );
-                      })}
-
-                    </div>
-                  )}
-                </div>
+                    {matchedGoals.map((mg) => renderGoalCard(mg))}
+                  </div>
+                )}
+              </div>
             </div>
           </div>
 
