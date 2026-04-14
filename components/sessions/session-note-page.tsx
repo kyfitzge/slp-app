@@ -1704,8 +1704,8 @@ export function SessionNotePage({
       // Content exists but no keyword matches — show all goals so none are missed
       goals = allGoals;
     } else {
-      // Nothing yet — show goals that already have saved data
-      goals = allGoals.filter((g) => !!initialGoalData[g.id]);
+      // Nothing entered yet — always show all goals so the SLP has them for reference
+      goals = allGoals;
     }
 
     return goals.map((goal) => {
@@ -2422,30 +2422,21 @@ export function SessionNotePage({
                 </div>
               </div>
 
-              {/* B. Clinical Data — one sub-section per matched goal */}
-              {anyPresent && (
-                <div>
-                  <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">
-                    B. Clinical Data
-                  </p>
+              {/* B. Clinical Data — one sub-section per goal (always shown) */}
+              <div>
+                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">
+                  B. Clinical Data
+                </p>
 
-                  {matchedGoals.length === 0 ? (
-                    /* ── No goals detected yet ── */
-                    <div className="space-y-2">
-                      <div className="rounded-lg border divide-y">
-                        <FieldRow icon={Target} label="Goals Targeted" value={null} missing />
-                        <FieldRow label="Accuracy" value={null} missing />
-                        <FieldRow label="Number of Trials" value={null} missing />
-                        <FieldRow label="Level of Support" value={null} missing />
-                      </div>
-                      <p className="text-xs text-muted-foreground italic mt-1">
-                        Goals appear automatically once you start typing your note or record your session summary.
-                      </p>
-                    </div>
-                  ) : (
-                    /* ── One editable card per matched goal ── */
-                    <div className="space-y-3">
-                      {matchedGoals.map((mg) => {
+                {matchedGoals.length === 0 ? (
+                  /* ── No goals on file ── */
+                  <p className="text-xs text-muted-foreground italic">
+                    No goals on file for this session.
+                  </p>
+                ) : (
+                  /* ── One editable card per goal ── */
+                  <div className="space-y-3">
+                    {matchedGoals.map((mg) => {
                         const aiExt  = aiExtractions[mg.goal.id];
                         const ovride = goalOverrides[mg.goal.id];
                         const acc    = goalEffectiveAccuracy(mg, aiExt, ovride);
@@ -2503,7 +2494,6 @@ export function SessionNotePage({
                     </div>
                   )}
                 </div>
-              )}
             </div>
           </div>
 
