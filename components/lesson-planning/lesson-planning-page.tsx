@@ -458,6 +458,23 @@ export function LessonPlanningPage({ students }: Props) {
     setShowHistory(false);
   }
 
+  // ── Delete from history panel ─────────────────────────────────────────────
+
+  async function handleDeleteFromHistory(planId: string) {
+    try {
+      const res = await fetch(`/api/lesson-plans/${planId}`, { method: "DELETE" });
+      if (!res.ok) throw new Error();
+      setPlans(prev => prev.filter(p => p.id !== planId));
+      if (activePlan?.id === planId) {
+        setActivePlan(null);
+        setPlanText("");
+      }
+      toast.success("Plan deleted.");
+    } catch {
+      toast.error("Failed to delete plan.");
+    }
+  }
+
   // ── New plan ───────────────────────────────────────────────────────────────
 
   function handleNewPlan() {
@@ -540,355 +557,272 @@ export function LessonPlanningPage({ students }: Props) {
         {/* ── RIGHT: Main content card ── */}
         <div className="flex flex-col min-h-0 overflow-hidden rounded-xl border bg-card">
           {!selectedStudent ? (
-            /* Empty state */
+            /* ── Empty state ── */
             <div
               onDragOver={(e) => { e.preventDefault(); setDragOver("primary"); }}
               onDragLeave={() => setDragOver(null)}
               onDrop={(e) => handleDrop(e, "primary")}
               className={cn(
-                "flex-1 flex flex-col items-center justify-center gap-4 text-center p-12 transition-colors",
-                dragOver === "primary" && "ring-2 ring-dashed ring-primary/50 bg-primary/5"
+                "flex-1 flex flex-col items-center justify-center text-center p-8 transition-colors",
+                dragOver === "primary" && "ring-2 ring-inset ring-dashed ring-primary/40 bg-primary/5"
               )}
             >
-              <div className="w-16 h-16 rounded-2xl bg-primary/10 flex items-center justify-center">
-                <BookOpen className="h-8 w-8 text-primary/60" />
-              </div>
-              <div>
-                <p className="text-sm font-medium text-muted-foreground mb-1">Select a student or drag one here</p>
-                <p className="text-xs text-muted-foreground max-w-xs">
-                  Drag a student from the caseload to get started.
-                </p>
-              </div>
+              <BookOpen className="h-10 w-10 text-muted-foreground/20 mb-3" />
+              <p className="text-sm font-medium text-muted-foreground mb-1">
+                Select a student to start planning
+              </p>
+              <p className="text-xs text-muted-foreground max-w-xs">
+                Choose a student from the caseload, or drag one here to get started.
+              </p>
             </div>
           ) : (
           <div className="flex-1 min-h-0 flex flex-col overflow-hidden">
 
-            {/* ── Header ── */}
-            <div className="flex items-center justify-between px-6 py-4 border-b shrink-0 gap-3 flex-wrap">
-              <div className="flex items-start gap-3 flex-wrap">
-                {/* Primary + additional student names */}
-                <div>
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <h2 className="text-base font-semibold">
-                      {selectedStudent.firstName} {selectedStudent.lastName}
-                    </h2>
-                    {additionalStudents.map(s => (
-                      <span key={s.id} className="flex items-center gap-2">
-                        <span className="text-muted-foreground text-sm">+</span>
-                        <span className="flex items-center gap-1">
-                          <span className="text-base font-semibold">
-                            {s.firstName} {s.lastName}
-                          </span>
-                          <button
-                            onClick={() => handleRemoveStudent(s.id)}
-                            className="ml-0.5 rounded-full p-0.5 hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
-                            title={`Remove ${s.firstName}`}
-                          >
-                            <X className="h-3.5 w-3.5" />
-                          </button>
-                        </span>
-                      </span>
-                    ))}
-                  </div>
-                  <p className="text-xs text-muted-foreground mt-0.5">
-                    {isGroup
-                      ? "Group session"
-                      : <>
-                          {selectedStudent.goals.filter(g => g.status === "ACTIVE").length} active goal
-                          {selectedStudent.goals.filter(g => g.status === "ACTIVE").length !== 1 ? "s" : ""}
-                          {selectedStudent.gradeLevel ? ` · ${selectedStudent.gradeLevel}` : ""}
-                          {selectedStudent.schoolName ? ` · ${selectedStudent.schoolName}` : ""}
-                        </>
-                    }
-                  </p>
-                </div>
-
-                {/* Add student picker — always shown when there are available students */}
-                {availableToAdd.length > 0 && (
-                  <div className="relative mt-0.5">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="gap-1.5 h-7 text-xs border-dashed"
-                      onClick={() => setShowStudentPicker(p => !p)}
-                    >
-                      <UserPlus className="h-3.5 w-3.5" />
-                      Add student
-                    </Button>
-                    {showStudentPicker && (
-                      <div className="absolute left-0 top-full mt-1 w-60 bg-card border rounded-lg shadow-lg z-50 overflow-hidden">
-                        <div className="text-xs font-medium text-muted-foreground px-3 py-2 border-b bg-muted/30">
-                          Add student to group
-                        </div>
-                        <div className="max-h-52 overflow-y-auto">
-                          {availableToAdd.map(s => (
-                            <button
-                              key={s.id}
-                              onClick={() => handleAddStudent(s.id)}
-                              className="w-full text-left px-3 py-2.5 text-sm hover:bg-muted/50 transition-colors border-b last:border-0"
-                            >
-                              <div className="font-medium">{s.firstName} {s.lastName}</div>
-                              <div className="text-xs text-muted-foreground">
-                                {s.goals.filter(g => g.status === "ACTIVE").length} active goal
-                                {s.goals.filter(g => g.status === "ACTIVE").length !== 1 ? "s" : ""}
-                                {s.gradeLevel ? ` · ${s.gradeLevel}` : ""}
-                              </div>
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                )}
+            {/* ── Tinted header ── */}
+            <div className="flex items-center gap-2.5 px-5 py-3.5 bg-primary/5 border-b border-primary/10 shrink-0">
+              <div className="flex items-center justify-center h-7 w-7 rounded-lg bg-primary/10 shrink-0">
+                <BookOpen className="h-4 w-4 text-primary" />
               </div>
-
-              <div className="flex items-center gap-2">
-                {/* History dropdown */}
-                <div className="relative">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="gap-1.5 h-8 text-xs"
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-semibold">Session Plan</p>
+                <p className="text-xs text-muted-foreground truncate">
+                  {[selectedStudent, ...additionalStudents].map(s => s.firstName + " " + s.lastName).join(" · ")}
+                  {sessionDate ? ` · ${format(new Date(sessionDate + "T12:00:00"), "MMM d, yyyy")}` : ""}
+                </p>
+              </div>
+              <div className="flex items-center gap-2 shrink-0">
+                {activePlan && (
+                  <Badge variant="outline" className="text-xs border-emerald-200 bg-emerald-50 text-emerald-700">
+                    Saved
+                  </Badge>
+                )}
+                {studentPlans.length > 0 && (
+                  <button
                     onClick={() => setShowHistory(h => !h)}
                     disabled={loadingPlans}
+                    className={cn(
+                      "flex items-center gap-1.5 rounded-md px-2.5 py-1 text-xs font-medium transition-colors border",
+                      showHistory
+                        ? "bg-primary/10 text-primary border-primary/20"
+                        : "bg-card text-muted-foreground border-border hover:bg-muted hover:text-foreground"
+                    )}
                   >
                     {loadingPlans
                       ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
                       : <History className="h-3.5 w-3.5" />
                     }
-                    Past Plans
-                    {studentPlans.length > 0 && (
-                      <Badge variant="secondary" className="ml-0.5 text-[10px] px-1 py-0 h-4">
-                        {studentPlans.length}
-                      </Badge>
-                    )}
-                  </Button>
-                  {showHistory && studentPlans.length > 0 && (
-                    <div className="absolute right-0 top-full mt-1 w-72 bg-card border rounded-lg shadow-lg z-50 overflow-hidden">
-                      <div className="text-xs font-medium text-muted-foreground px-3 py-2 border-b bg-muted/30">
-                        Saved Plans
-                      </div>
-                      <div className="max-h-60 overflow-y-auto">
-                        {studentPlans.map(plan => (
-                          <button
-                            key={plan.id}
-                            onClick={() => handleLoadPlan(plan)}
-                            className={cn(
-                              "w-full text-left px-3 py-2.5 text-sm hover:bg-muted/50 transition-colors border-b last:border-0",
-                              activePlan?.id === plan.id && "bg-primary/5"
-                            )}
-                          >
-                            <div className="font-medium">
-                              {format(new Date(plan.sessionDate + "T12:00:00"), "MMM d, yyyy")}
-                            </div>
-                            <div className="text-xs text-muted-foreground mt-0.5">
-                              {SESSION_TYPE_OPTIONS.find(t => t.value === plan.sessionType)?.label ?? plan.sessionType}
-                              {plan.durationMins ? ` · ${plan.durationMins} min` : ""}
-                              {" · "}saved {format(new Date(plan.createdAt), "MMM d")}
-                            </div>
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                  {showHistory && studentPlans.length === 0 && (
-                    <div className="absolute right-0 top-full mt-1 w-60 bg-card border rounded-lg shadow-lg z-50 p-4 text-center text-sm text-muted-foreground">
-                      No saved plans yet.
-                    </div>
-                  )}
-                </div>
-
+                    {studentPlans.length} past
+                    {showHistory ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
+                  </button>
+                )}
                 {hasPlan && (
-                  <Button variant="outline" size="sm" className="gap-1.5 h-8 text-xs" onClick={handleNewPlan}>
+                  <button
+                    onClick={handleNewPlan}
+                    className="flex items-center gap-1.5 rounded-md px-2.5 py-1 text-xs font-medium text-muted-foreground border border-border hover:bg-muted hover:text-foreground transition-colors"
+                  >
                     <Plus className="h-3.5 w-3.5" />
-                    New Plan
-                  </Button>
+                    New
+                  </button>
                 )}
               </div>
             </div>
 
-            {/* ── Secondary student drop zone — shown when there are students available to add ── */}
-            {availableToAdd.length > 0 && (
-              <div
-                onDragOver={(e) => { e.preventDefault(); setDragOver("secondary"); }}
-                onDragLeave={() => setDragOver(null)}
-                onDrop={(e) => handleDrop(e, "secondary")}
-                className={cn(
-                  "mx-6 mt-3 rounded-lg border-2 border-dashed px-4 py-2 text-center text-xs text-muted-foreground transition-colors shrink-0",
-                  dragOver === "secondary"
-                    ? "border-primary/60 bg-primary/5 text-primary"
-                    : "border-border/50 hover:border-border"
-                )}
-              >
-                <UserPlus className="h-3.5 w-3.5 inline mr-1.5 opacity-60" />
-                Drop a student here to add to this group session
-              </div>
-            )}
-
-            {/* ── Active goal chips ── */}
-            {(selectedStudent.goals.filter(g => g.status === "ACTIVE").length > 0 ||
-              additionalStudents.some(s => s.goals.filter(g => g.status === "ACTIVE").length > 0)) && (
-              <div className="px-6 py-3 border-b shrink-0">
-                {isGroup ? (
-                  /* Group layout: show each student's goals in a labeled row */
-                  <div className="space-y-2">
-                    {[selectedStudent, ...additionalStudents].map((student) => {
-                      const activeGoals = student.goals.filter(g => g.status === "ACTIVE");
-                      if (activeGoals.length === 0) return null;
-                      return (
-                        <div key={student.id} className="flex items-center gap-2 overflow-x-auto pb-0.5">
-                          <span className="text-xs font-semibold text-muted-foreground shrink-0 w-16 truncate">{student.firstName}:</span>
-                          {activeGoals.map(goal => <GoalChip key={goal.id} goal={goal} />)}
-                        </div>
-                      );
-                    })}
-                  </div>
+            {/* ── History inline panel ── */}
+            {showHistory && (
+              <div className="shrink-0 border-b bg-muted/20 max-h-56 overflow-y-auto">
+                {studentPlans.length === 0 ? (
+                  <p className="text-xs text-muted-foreground text-center py-4">No saved plans yet.</p>
                 ) : (
-                  /* Single-student layout */
-                  <div className="flex items-center gap-2 overflow-x-auto pb-1">
-                    <span className="text-xs text-muted-foreground font-medium shrink-0">Active goals:</span>
-                    {selectedStudent.goals
-                      .filter(g => g.status === "ACTIVE")
-                      .map(goal => <GoalChip key={goal.id} goal={goal} />)
-                    }
+                  <div className="flex flex-col divide-y divide-border/60">
+                    {studentPlans.map(plan => (
+                      <button
+                        key={plan.id}
+                        onClick={() => handleLoadPlan(plan)}
+                        className={cn(
+                          "group flex items-start gap-3 px-5 py-3 text-left text-xs transition-colors hover:bg-muted/50",
+                          activePlan?.id === plan.id && "bg-primary/5"
+                        )}
+                      >
+                        <div className="flex-1 min-w-0 space-y-0.5">
+                          <div className="flex items-center gap-2">
+                            <Badge variant="outline" className="text-[10px] h-4 px-1.5 border-amber-200 bg-amber-50 text-amber-700 shrink-0">
+                              Draft
+                            </Badge>
+                            <span className="font-medium text-foreground truncate">
+                              {format(new Date(plan.sessionDate + "T12:00:00"), "MMM d, yyyy")}
+                            </span>
+                          </div>
+                          <p className="text-muted-foreground">
+                            {SESSION_TYPE_OPTIONS.find(t => t.value === plan.sessionType)?.label ?? plan.sessionType}
+                            {plan.durationMins ? ` · ${plan.durationMins} min` : ""}
+                          </p>
+                        </div>
+                        <span
+                          role="button"
+                          onClick={(e) => { e.stopPropagation(); handleDeleteFromHistory(plan.id); }}
+                          className="hidden group-hover:flex items-center justify-center h-6 w-6 rounded text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors shrink-0 mt-0.5"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </span>
+                      </button>
+                    ))}
                   </div>
                 )}
               </div>
             )}
 
-            {/* ── Scrollable body ── */}
+            {/* ── Scrollable content ── */}
             <div className="flex-1 min-h-0 overflow-y-auto">
-              {!hasPlan ? (
-                /* ── Setup form ── */
-                <div className="p-6 max-w-2xl mx-auto">
-                  <div className="mb-6">
-                    <h3 className="text-sm font-semibold mb-1">Plan Your Next Session</h3>
-                    <p className="text-xs text-muted-foreground">
-                      {isGroup
-                        ? `The AI will use ${[selectedStudent, ...additionalStudents].map(s => s.firstName).join(", ")}'s IEP goals, recent session data, and your notes to build a shared group lesson plan.`
-                        : `The AI will use ${selectedStudent.firstName}'s active IEP goals, recent session data, and your notes to build a ready-to-use lesson plan.`
-                      }
-                    </p>
-                  </div>
+              <div className="p-5 flex flex-col gap-4">
 
-                  <div className="space-y-5">
-                    {/* Date + Type + Duration */}
-                    <div className="grid grid-cols-3 gap-4">
-                      <div className="space-y-1.5">
-                        <Label className="text-xs">Session Date</Label>
-                        <Input
-                          type="date"
-                          value={sessionDate}
-                          onChange={e => setSessionDate(e.target.value)}
-                          className="h-9"
-                        />
-                      </div>
-                      <div className="space-y-1.5">
-                        <Label className="text-xs">Session Type</Label>
-                        <Select value={sessionType} onValueChange={setSessionType}>
-                          <SelectTrigger className="h-9">
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {SESSION_TYPE_OPTIONS.map(opt => (
-                              <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
+                {/* ── Student group management ── */}
+                <div className="shrink-0 flex items-center gap-2 flex-wrap">
+                  <span className="text-sm font-medium text-foreground">
+                    {selectedStudent.firstName} {selectedStudent.lastName}
+                  </span>
+                  {additionalStudents.map(s => (
+                    <span key={s.id} className="flex items-center gap-1">
+                      <span className="text-muted-foreground/50 text-xs">+</span>
+                      <span className="flex items-center gap-1 rounded-full bg-muted px-2.5 py-0.5 text-xs font-medium">
+                        {s.firstName} {s.lastName}
+                        <button
+                          onClick={() => handleRemoveStudent(s.id)}
+                          className="ml-0.5 text-muted-foreground hover:text-foreground transition-colors"
+                          title={`Remove ${s.firstName}`}
+                        >
+                          <X className="h-3 w-3" />
+                        </button>
+                      </span>
+                    </span>
+                  ))}
+                  {availableToAdd.length > 0 && (
+                    <div className="relative">
+                      <button
+                        onClick={() => setShowStudentPicker(p => !p)}
+                        className="flex items-center gap-1 text-xs text-muted-foreground border border-dashed border-border rounded-full px-2.5 py-0.5 hover:text-foreground hover:border-foreground/30 transition-colors"
+                      >
+                        <UserPlus className="h-3 w-3" />
+                        Add student
+                      </button>
+                      {showStudentPicker && (
+                        <div className="absolute left-0 top-full mt-1 w-60 bg-card border rounded-lg shadow-lg z-50 overflow-hidden">
+                          <div className="text-xs font-medium text-muted-foreground px-3 py-2 border-b bg-muted/30">
+                            Add to group
+                          </div>
+                          <div className="max-h-52 overflow-y-auto">
+                            {availableToAdd.map(s => (
+                              <button
+                                key={s.id}
+                                onClick={() => handleAddStudent(s.id)}
+                                className="w-full text-left px-3 py-2.5 text-sm hover:bg-muted/50 transition-colors border-b last:border-0"
+                              >
+                                <div className="font-medium">{s.firstName} {s.lastName}</div>
+                                <div className="text-xs text-muted-foreground">
+                                  {s.goals.filter(g => g.status === "ACTIVE").length} active goal
+                                  {s.goals.filter(g => g.status === "ACTIVE").length !== 1 ? "s" : ""}
+                                  {s.gradeLevel ? ` · ${s.gradeLevel}` : ""}
+                                </div>
+                              </button>
                             ))}
-                          </SelectContent>
-                        </Select>
-                      </div>
-                      <div className="space-y-1.5">
-                        <Label className="text-xs">Duration (min)</Label>
-                        <Input
-                          type="number"
-                          min={5} max={120}
-                          value={durationMins}
-                          onChange={e => setDurationMins(e.target.value)}
-                          className="h-9"
-                        />
-                      </div>
+                          </div>
+                        </div>
+                      )}
                     </div>
-
-                    {/* SLP Notes */}
-                    <div className="space-y-1.5">
-                      <Label className="text-xs">
-                        Focus notes <span className="text-muted-foreground font-normal">(optional)</span>
-                      </Label>
-                      <Textarea
-                        placeholder={`What do you want to focus on? E.g. "Focus on /r/ in sentences today" or "Use Cariboo game, student loves it" or "Group session — Liam and Emma together"`}
-                        value={slpNotes}
-                        onChange={e => setSlpNotes(e.target.value)}
-                        className="min-h-[100px] text-sm resize-none"
-                      />
-                    </div>
-
-                    <Button
-                      onClick={handleGenerate}
-                      disabled={isGenerating || !sessionDate}
-                      className="w-full gap-2"
+                  )}
+                  {/* Drop zone hint */}
+                  {availableToAdd.length > 0 && (
+                    <div
+                      onDragOver={(e) => { e.preventDefault(); setDragOver("secondary"); }}
+                      onDragLeave={() => setDragOver(null)}
+                      onDrop={(e) => handleDrop(e, "secondary")}
+                      className={cn(
+                        "flex items-center gap-1.5 rounded-full border-2 border-dashed px-2.5 py-0.5 text-xs text-muted-foreground/60 transition-colors",
+                        dragOver === "secondary"
+                          ? "border-primary/50 bg-primary/5 text-primary"
+                          : "border-border/40"
+                      )}
                     >
-                      {isGenerating
-                        ? <><Loader2 className="h-4 w-4 animate-spin" /> Generating plan…</>
-                        : <><Sparkles className="h-4 w-4" /> Generate Lesson Plan</>
-                      }
-                    </Button>
+                      <UserPlus className="h-3 w-3" />
+                      or drag here
+                    </div>
+                  )}
+                </div>
+
+                {/* ── Session fields ── */}
+                <div className="shrink-0 flex flex-col sm:flex-row gap-2">
+                  <Input
+                    type="date"
+                    value={sessionDate}
+                    onChange={e => setSessionDate(e.target.value)}
+                    className="h-8 text-sm"
+                  />
+                  <Select value={sessionType} onValueChange={setSessionType}>
+                    <SelectTrigger className="h-8 text-sm">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {SESSION_TYPE_OPTIONS.map(opt => (
+                        <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    <Label className="text-xs text-muted-foreground whitespace-nowrap">Duration</Label>
+                    <Input
+                      type="number"
+                      min={5} max={180}
+                      value={durationMins}
+                      onChange={e => setDurationMins(e.target.value)}
+                      className="h-8 text-sm w-20"
+                    />
+                    <span className="text-xs text-muted-foreground">min</span>
                   </div>
                 </div>
-              ) : (
-                /* ── Plan display ── */
-                <div className="p-6 max-w-3xl mx-auto">
 
-                  {/* Plan meta bar */}
-                  <div className="flex items-center justify-between mb-5 flex-wrap gap-3">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <Badge variant="outline" className="text-xs gap-1">
-                        {format(new Date(sessionDate + "T12:00:00"), "MMMM d, yyyy")}
-                      </Badge>
-                      <Badge variant="outline" className="text-xs">
-                        {SESSION_TYPE_OPTIONS.find(t => t.value === sessionType)?.label ?? sessionType}
-                      </Badge>
-                      <Badge variant="outline" className="text-xs">
-                        {durationMins} min
-                      </Badge>
-                      {activePlan && (
-                        <Badge variant="secondary" className="text-xs">Saved</Badge>
-                      )}
-                      {hasUnsavedPlan && (
-                        <Badge variant="outline" className="text-xs text-amber-600 border-amber-300 bg-amber-50">
-                          Unsaved
-                        </Badge>
-                      )}
-                    </div>
-                    <div className="flex items-center gap-2">
+                {/* ── Focus notes ── */}
+                <div className="shrink-0">
+                  <Textarea
+                    placeholder={`Focus notes — e.g. "Work on /r/ in sentences" or "Use Cariboo game"`}
+                    value={slpNotes}
+                    onChange={e => setSlpNotes(e.target.value)}
+                    className="min-h-[80px] text-sm resize-none"
+                  />
+                </div>
+
+                {/* ── Action buttons ── */}
+                <div className="shrink-0 flex items-center gap-2 flex-wrap">
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    disabled={isGenerating || !sessionDate}
+                    onClick={handleGenerate}
+                    className="gap-1.5 h-8 text-xs text-violet-500 hover:text-violet-700 hover:bg-violet-50"
+                  >
+                    {isGenerating
+                      ? <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Generating…</>
+                      : <><Sparkles className="h-3.5 w-3.5" /> {hasPlan ? "Regenerate" : "Generate"}</>
+                    }
+                  </Button>
+                  {hasPlan && (
+                    <>
                       <Button
                         size="sm"
                         variant="ghost"
-                        className="gap-1.5 h-8 text-xs"
-                        onClick={handleGenerate}
-                        disabled={isGenerating}
-                      >
-                        {isGenerating
-                          ? <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Regenerating…</>
-                          : <><Sparkles className="h-3.5 w-3.5 text-violet-500" /> Regenerate</>
-                        }
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        className="gap-1.5 h-8 text-xs"
-                        onClick={handleSave}
                         disabled={isSaving}
+                        onClick={handleSave}
+                        className="gap-1.5 h-8 text-xs hover:bg-muted"
                       >
                         {isSaving
                           ? <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Saving…</>
-                          : <><Save className="h-3.5 w-3.5" /> {activePlan ? "Update" : "Save"}</>
+                          : <><Save className="h-3.5 w-3.5" /> {activePlan ? "Update" : "Save Draft"}</>
                         }
                       </Button>
                       <Button
                         size="sm"
                         variant="ghost"
-                        className="gap-1.5 h-8 text-xs text-destructive hover:text-destructive hover:bg-destructive/10"
-                        onClick={handleDelete}
                         disabled={isDeleting}
+                        onClick={handleDelete}
+                        className="gap-1.5 h-8 text-xs text-destructive hover:text-destructive hover:bg-destructive/10"
                       >
                         {isDeleting
                           ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
@@ -896,32 +830,60 @@ export function LessonPlanningPage({ students }: Props) {
                         }
                         {activePlan ? "Delete" : "Discard"}
                       </Button>
-                    </div>
-                  </div>
-
-                  {/* If there are SLP notes, show them */}
-                  {slpNotes.trim() && (
-                    <div className="mb-4 rounded-lg bg-muted/50 border px-4 py-2.5 text-xs text-muted-foreground">
-                      <span className="font-medium text-foreground">Focus notes: </span>{slpNotes}
-                    </div>
-                  )}
-
-                  {/* Sections */}
-                  {sections.length > 0 ? (
-                    <div className="space-y-3">
-                      {sections.map((section, idx) => (
-                        <PlanSectionCard key={idx} section={section} />
-                      ))}
-                    </div>
-                  ) : (
-                    <div className="rounded-lg border bg-muted/30 p-4">
-                      <pre className="text-sm text-foreground/80 whitespace-pre-wrap font-sans leading-relaxed">
-                        {planText}
-                      </pre>
-                    </div>
+                    </>
                   )}
                 </div>
-              )}
+
+                {/* ── Plan content ── */}
+                {hasPlan && (
+                  <>
+                    {/* Goal chips reference */}
+                    {(selectedStudent.goals.filter(g => g.status === "ACTIVE").length > 0 ||
+                      additionalStudents.some(s => s.goals.filter(g => g.status === "ACTIVE").length > 0)) && (
+                      <div className="shrink-0 pt-1 border-t">
+                        {isGroup ? (
+                          <div className="space-y-2 pt-3">
+                            {[selectedStudent, ...additionalStudents].map((student) => {
+                              const activeGoals = student.goals.filter(g => g.status === "ACTIVE");
+                              if (activeGoals.length === 0) return null;
+                              return (
+                                <div key={student.id} className="flex items-center gap-2 overflow-x-auto pb-0.5">
+                                  <span className="text-xs font-semibold text-muted-foreground shrink-0 w-16 truncate">{student.firstName}:</span>
+                                  {activeGoals.map(goal => <GoalChip key={goal.id} goal={goal} />)}
+                                </div>
+                              );
+                            })}
+                          </div>
+                        ) : (
+                          <div className="flex items-center gap-2 overflow-x-auto pb-1 pt-3">
+                            <span className="text-xs text-muted-foreground font-medium shrink-0">Active goals:</span>
+                            {selectedStudent.goals
+                              .filter(g => g.status === "ACTIVE")
+                              .map(goal => <GoalChip key={goal.id} goal={goal} />)
+                            }
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Plan sections */}
+                    <div className="space-y-3 pb-4">
+                      {sections.length > 0 ? (
+                        sections.map((section, idx) => (
+                          <PlanSectionCard key={idx} section={section} />
+                        ))
+                      ) : (
+                        <div className="rounded-lg border bg-muted/30 p-4">
+                          <pre className="text-sm text-foreground/80 whitespace-pre-wrap font-sans leading-relaxed">
+                            {planText}
+                          </pre>
+                        </div>
+                      )}
+                    </div>
+                  </>
+                )}
+
+              </div>
             </div>
           </div>
         )}
