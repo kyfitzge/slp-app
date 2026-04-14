@@ -389,6 +389,7 @@ function TimeGridView({
   days, sessions, dragOverSlot, draggingDurationMins, slotPx, onDragOver, onDragLeave, onDrop, onDelete,
   draggingId, onSessionDragStart, onDragEnd,
   resizePreview, onResizeStart,
+  dropTargetSessionId, onSessionBlockDragOver, onSessionBlockDragLeave, onSessionBlockDrop,
 }: {
   days: Date[];
   sessions: CalendarSession[];
@@ -404,6 +405,10 @@ function TimeGridView({
   onDragEnd: () => void;
   resizePreview: ResizePreview | null;
   onResizeStart: (sessionId: string, edge: "top" | "bottom", originY: number, originTop: number, originDuration: number) => void;
+  dropTargetSessionId: string | null;
+  onSessionBlockDragOver: (sessionId: string) => void;
+  onSessionBlockDragLeave: () => void;
+  onSessionBlockDrop: (sessionId: string, e: React.DragEvent) => void;
 }) {
   const nowPx = useCurrentTimePx();
   const pxPerMin  = slotPx / 30;
@@ -543,6 +548,7 @@ function TimeGridView({
                   const names = s.sessionStudents.map(ss =>
                     `${ss.student.firstName} ${ss.student.lastName.charAt(0)}.`
                   ).join(", ");
+                  const isDropTarget = dropTargetSessionId === s.id;
                   return (
                     <SessionEventMenu key={s.id} session={s} onDelete={onDelete}>
                       <Link
@@ -550,16 +556,31 @@ function TimeGridView({
                         draggable
                         onDragStart={e => { sessionDragStart(e, s.id); onSessionDragStart(s.id); }}
                         onDragEnd={onDragEnd}
+                        onDragOver={e => {
+                          if (!draggingId) { // student drag, not session-move
+                            e.preventDefault();
+                            e.stopPropagation();
+                            onSessionBlockDragOver(s.id);
+                          }
+                        }}
+                        onDragLeave={e => { e.stopPropagation(); onSessionBlockDragLeave(); }}
+                        onDrop={e => { e.stopPropagation(); onSessionBlockDrop(s.id, e); }}
                         className={cn(
                           "absolute left-0.5 right-0.5 z-20 rounded border px-1.5 py-0.5 text-xs",
                           "leading-tight overflow-hidden transition-all cursor-grab active:cursor-grabbing",
                           color,
                           s.isCancelled && "opacity-40 line-through",
                           draggingId === s.id ? "opacity-30 ring-2 ring-primary/40" : "hover:opacity-85",
+                          isDropTarget && "ring-2 ring-primary shadow-lg brightness-95",
                         )}
                         style={{ top: idx * (slotPx + 2), height: slotPx - 2 }}
                       >
                         <span className="font-medium truncate block">{names}</span>
+                        {isDropTarget && (
+                          <span className="absolute inset-0 flex items-center justify-center bg-primary/10 rounded text-primary font-semibold pointer-events-none">
+                            + Add student
+                          </span>
+                        )}
                       </Link>
                     </SessionEventMenu>
                   );
@@ -578,6 +599,7 @@ function TimeGridView({
                     `${ss.student.firstName} ${ss.student.lastName.charAt(0)}.`
                   ).join(", ");
                   const label  = SESSION_TYPE_LABELS[s.sessionType] ?? s.sessionType;
+                  const isDropTarget = dropTargetSessionId === s.id;
                   return (
                     <SessionEventMenu key={s.id} session={s} onDelete={onDelete}>
                       {/* Outer div is the drag source — covers the full block including resize handles */}
@@ -590,6 +612,15 @@ function TimeGridView({
                           onSessionDragStart(s.id);
                         }}
                         onDragEnd={onDragEnd}
+                        onDragOver={e => {
+                          if (!draggingId) { // student drag, not session-move
+                            e.preventDefault();
+                            e.stopPropagation();
+                            onSessionBlockDragOver(s.id);
+                          }
+                        }}
+                        onDragLeave={e => { e.stopPropagation(); onSessionBlockDragLeave(); }}
+                        onDrop={e => { e.stopPropagation(); onSessionBlockDrop(s.id, e); }}
                         className={cn(
                           "absolute left-0.5 right-0.5 z-20 rounded border text-xs overflow-hidden",
                           "select-none cursor-grab active:cursor-grabbing",
@@ -597,6 +628,7 @@ function TimeGridView({
                           s.isCancelled && "opacity-40",
                           draggingId === s.id ? "opacity-30 ring-2 ring-primary/40" : "",
                           isResizing && "ring-2 ring-primary/60 shadow-md cursor-ns-resize",
+                          isDropTarget && "ring-2 ring-primary shadow-lg brightness-95",
                         )}
                         style={{ top, height }}
                       >
@@ -640,6 +672,15 @@ function TimeGridView({
                             onResizeStart(s.id, "bottom", e.clientY, baseTop, baseDur);
                           }}
                         />
+
+                        {/* Drop-target overlay — shown when a student is dragged over this block */}
+                        {isDropTarget && (
+                          <div className="absolute inset-0 flex items-center justify-center bg-primary/15 rounded pointer-events-none z-40">
+                            <span className="text-xs font-semibold text-primary bg-white/90 border border-primary/30 px-2 py-1 rounded shadow-sm">
+                              + Add student
+                            </span>
+                          </div>
+                        )}
                       </div>
                     </SessionEventMenu>
                   );
@@ -701,6 +742,9 @@ export function DashboardCalendar({ initialSessions, students = [] }: DashboardC
   const draggingDurationMins = draggingSessionId
     ? (sessions.find(s => s.id === draggingSessionId)?.durationMins ?? 30)
     : 30;
+
+  // Which existing session block a student is being dragged over (for add-student highlight)
+  const [dropTargetSessionId, setDropTargetSessionId] = useState<string | null>(null);
 
   // Resize state (mouse-based, not HTML5 drag)
   const resizingRef = useRef<{
@@ -837,6 +881,39 @@ export function DashboardCalendar({ initialSessions, students = [] }: DashboardC
       // Revert optimistic update on failure
       setSessions(s => s.map(sess => sess.id === sessionId ? prev : sess));
       toast.error("Failed to reschedule session");
+    }
+  }
+
+  // ── Add student to existing session (drag-drop onto session block) ─────────
+
+  async function handleAddStudentToSession(sessionId: string, e: React.DragEvent) {
+    setDropTargetSessionId(null);
+    try {
+      const raw = e.dataTransfer.getData("application/json");
+      if (!raw) return;
+      const data = JSON.parse(raw);
+      // Only handle student drops, not session-move payloads
+      if (data.type === "session-move") return;
+      const { studentId, studentName } = data as { studentId: string; studentName: string };
+      if (!studentId) return;
+
+      const res = await fetch(`/api/sessions/${sessionId}/students`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ studentId }),
+      });
+      if (!res.ok) throw new Error();
+      const { sessionStudents } = await res.json();
+
+      // Optimistic: replace session's student list with the returned one
+      setSessions(prev => prev.map(s =>
+        s.id === sessionId ? { ...s, sessionStudents } : s
+      ));
+      const first = (studentName ?? "Student").split(" ")[0];
+      toast.success(`${first} added to session`);
+      router.refresh();
+    } catch {
+      toast.error("Failed to add student to session");
     }
   }
 
@@ -1149,6 +1226,10 @@ export function DashboardCalendar({ initialSessions, students = [] }: DashboardC
             onDragEnd={() => setDraggingSessionId(null)}
             resizePreview={resizePreview}
             onResizeStart={handleResizeStart}
+            dropTargetSessionId={dropTargetSessionId}
+            onSessionBlockDragOver={setDropTargetSessionId}
+            onSessionBlockDragLeave={() => setDropTargetSessionId(null)}
+            onSessionBlockDrop={handleAddStudentToSession}
           />
         )}
       </div>
