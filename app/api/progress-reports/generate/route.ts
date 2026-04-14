@@ -156,7 +156,28 @@ Close with a brief paragraph (2–4 sentences) on recommended next steps. Tie su
 - Never invent data, scores, or observations not in the provided material
 - Don't claim mastery unless performance is consistently at or above target across multiple sessions
 - If data is limited for a goal, say so in one clear sentence and move on — don't pad it
-- Keep the whole report tight: quality over length`;
+- Keep the whole report tight: quality over length
+
+---
+
+## Source Attribution Markers — REQUIRED
+
+Every phrase in the report must be tagged with exactly one of three markers based on its origin. No untagged prose.
+
+**{IEP}...{/IEP}** — wrap any content drawn directly from the IEP data: goal names, target accuracy percentages, baseline scores, service minutes, IEP status, goal domains, baseline dates.
+Example: {IEP}Ethan's /r/ articulation goal targets 80% accuracy{/IEP}
+
+**{NOTE}...{/NOTE}** — wrap any content drawn directly from session notes or recorded data points: observed accuracy percentages, trial counts, cueing levels used, specific activities, behavioral observations reported by the clinician.
+Example: {NOTE}Ethan produced /r/ correctly on 6 of 10 trials with direct verbal cues{/NOTE}
+
+**\*\*...\*\*** — wrap any content you inferred, synthesized, or added that was not explicitly stated in either the IEP data or session notes: trend interpretations, clinical conclusions, normalized language, recommended next steps, transitional prose.
+Example: \*\*progress appears to be emerging, with data suggesting improving accuracy over time\*\*
+
+Rules:
+- Tag every substantive phrase — do not leave clinical claims untagged
+- A single sentence may contain multiple tagged spans of different types
+- Transitional words ("During this period," "Overall,") that carry no clinical meaning may be left untagged
+- Do NOT nest markers inside each other`;
 
     const userMessage = `Generate a progress report for the following student and session data.
 
@@ -182,7 +203,7 @@ ${notesSection}`;
 
     const message = await anthropic.messages.create({
       model,
-      max_tokens: 4096,
+      max_tokens: 6000,
       system: systemPrompt,
       messages: [{ role: "user", content: userMessage }],
     });

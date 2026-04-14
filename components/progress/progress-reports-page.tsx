@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useRef } from "react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { formatDate } from "@/lib/utils/format-date";
@@ -25,7 +25,47 @@ import {
   ChevronDown,
   ChevronUp,
   Plus,
+  Check,
+  X,
+  Pencil,
 } from "lucide-react";
+
+// ─── Report segment parser ──────────────────────────────────────────────────────
+// Parses a report string containing three marker types into typed segments.
+
+type ReportSegment =
+  | { type: "text"; content: string }
+  | { type: "inferred"; content: string; idx: number }
+  | { type: "iep"; content: string }
+  | { type: "note"; content: string };
+
+function parseReportSegments(text: string): ReportSegment[] {
+  const regex = /\*\*([^*]+)\*\*|\{IEP\}([\s\S]*?)\{\/IEP\}|\{NOTE\}([\s\S]*?)\{\/NOTE\}/g;
+  const segments: ReportSegment[] = [];
+  let lastIdx = 0;
+  let inferIdx = 0;
+  let m: RegExpExecArray | null;
+  while ((m = regex.exec(text)) !== null) {
+    if (m.index > lastIdx) segments.push({ type: "text", content: text.slice(lastIdx, m.index) });
+    if (m[1] !== undefined) segments.push({ type: "inferred", content: m[1], idx: inferIdx++ });
+    else if (m[2] !== undefined) segments.push({ type: "iep", content: m[2] });
+    else if (m[3] !== undefined) segments.push({ type: "note", content: m[3] });
+    lastIdx = m.index + m[0].length;
+  }
+  if (lastIdx < text.length) segments.push({ type: "text", content: text.slice(lastIdx) });
+  return segments;
+}
+
+function stripReportMarkers(text: string): string {
+  return text
+    .replace(/\*\*([^*]+)\*\*/g, "$1")
+    .replace(/\{IEP\}([\s\S]*?)\{\/IEP\}/g, "$1")
+    .replace(/\{NOTE\}([\s\S]*?)\{\/NOTE\}/g, "$1");
+}
+
+function hasReportMarkers(text: string): boolean {
+  return /\*\*[^*]+\*\*|\{IEP\}[\s\S]*?\{\/IEP\}|\{NOTE\}[\s\S]*?\{\/NOTE\}/.test(text);
+}
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
 
@@ -94,6 +134,11 @@ export function ProgressReportsPage({ initialReports, students }: Props) {
   const [metadata, setMetadata] = useState<GenerateMetadata | null>(null);
   const [showHistory, setShowHistory] = useState(false);
   const [isEditingFinalized, setIsEditingFinalized] = useState(false);
+  /** true when AI-generated report contains source/inference markers and preview is active */
+  const [reportPreviewMode, setReportPreviewMode] = useState(false);
+  const [editingInferIdx, setEditingInferIdx] = useState(-1);
+  const [editingInferValue, setEditingInferValue] = useState("");
+  const editingInferRef = useRef<HTMLSpanElement>(null);
 
   const reportsByStudent = useMemo(() => {
     const map: Record<string, ReportListItem[]> = {};
@@ -112,6 +157,8 @@ export function ProgressReportsPage({ initialReports, students }: Props) {
     setMetadata(null);
     setShowHistory(false);
     setIsEditingFinalized(false);
+    setReportPreviewMode(false);
+    setEditingInferIdx(-1);
   }
 
   function handleSelectStudent(id: string) {
@@ -138,6 +185,8 @@ export function ProgressReportsPage({ initialReports, students }: Props) {
       });
       setMetadata(null);
       setIsEditingFinalized(false);
+      setReportPreviewMode(false);
+      setEditingInferIdx(-1);
     } catch {
       toast.error("Failed to load report.");
     } finally {
@@ -162,6 +211,8 @@ export function ProgressReportsPage({ initialReports, students }: Props) {
       const data = await res.json();
       setEditor((prev) => ({ ...prev, text: data.reportText, isAiGenerated: true }));
       setMetadata(data.metadata);
+      setReportPreviewMode(hasReportMarkers(data.reportText));
+      setEditingInferIdx(-1);
     } catch {
       toast.error("Failed to generate report. Please try again.");
     } finally {
@@ -172,11 +223,13 @@ export function ProgressReportsPage({ initialReports, students }: Props) {
   async function handleSave(finalize: boolean) {
     if (!editor.text.trim() || !selectedStudentId) return;
     setIsSaving(true);
+    // Always save clean text — strip all source/inference markers before persisting
+    const cleanText = stripReportMarkers(editor.text);
     try {
       const label = editor.title.trim() || `${editor.startDate} – ${editor.endDate}`;
 
       if (editor.reportId) {
-        const body: Record<string, unknown> = { summaryText: editor.text, periodLabel: label };
+        const body: Record<string, unknown> = { summaryText: cleanText, periodLabel: label };
         if (finalize) body.finalize = true;
         const res = await fetch(`/api/progress-reports/${editor.reportId}`, {
           method: "PATCH",
@@ -215,7 +268,7 @@ export function ProgressReportsPage({ initialReports, students }: Props) {
             periodLabel: label,
             periodStartDate: editor.startDate,
             periodEndDate: editor.endDate,
-            summaryText: editor.text,
+            summaryText: cleanText,
             goalSnapshots: metadata?.goalsUsed ?? null,
             isDraft: !finalize,
           }),
@@ -263,6 +316,86 @@ export function ProgressReportsPage({ initialReports, students }: Props) {
     } finally {
       setIsSaving(false);
     }
+  }
+
+  // ── Inference manipulation ────────────────────────────────────────────────────
+
+  function afterInferenceChange(newText: string) {
+    setEditor((prev) => ({ ...prev, text: newText }));
+    if (!hasReportMarkers(newText)) {
+      setReportPreviewMode(false);
+      setEditingInferIdx(-1);
+    }
+  }
+
+  function acceptInference(idx: number) {
+    let count = 0;
+    const newText = editor.text.replace(/\*\*([^*]+)\*\*/g, (match, content) => {
+      const result = count === idx ? content : match;
+      count++;
+      return result;
+    });
+    afterInferenceChange(newText);
+  }
+
+  function denyInference(idx: number) {
+    const text = editor.text;
+    let count = 0;
+    let markerStart = -1;
+    let markerEnd = -1;
+    text.replace(/\*\*([^*]+)\*\*/g, (match, _c, offset) => {
+      if (count === idx) { markerStart = offset; markerEnd = offset + match.length; }
+      count++;
+      return match;
+    });
+    if (markerStart === -1) return;
+
+    // Find sentence start (scan backward for .!? or \n)
+    let sentStart = 0;
+    for (let i = markerStart - 1; i >= 0; i--) {
+      if (/[.!?]/.test(text[i])) {
+        let j = i + 1;
+        while (j < markerStart && text[j] === " ") j++;
+        sentStart = j;
+        break;
+      }
+      if (text[i] === "\n") { sentStart = i + 1; break; }
+    }
+
+    // Find sentence end (scan forward from markerStart for .!? or \n)
+    let sentEnd = text.length;
+    for (let i = markerStart; i < text.length; i++) {
+      if (/[.!?]/.test(text[i])) {
+        sentEnd = i + 1;
+        while (sentEnd < text.length && text[sentEnd] === " ") sentEnd++;
+        if (sentEnd < markerEnd) sentEnd = markerEnd;
+        break;
+      }
+      if (text[i] === "\n" && i >= markerEnd) { sentEnd = i + 1; break; }
+    }
+
+    const newText = (text.slice(0, sentStart) + text.slice(sentEnd))
+      .replace(/\n{3,}/g, "\n\n")
+      .trim();
+    afterInferenceChange(newText);
+  }
+
+  function startEditInference(idx: number, currentText: string) {
+    setEditingInferIdx(idx);
+    setEditingInferValue(currentText);
+  }
+
+  function confirmEditInference(idx: number, textOverride?: string) {
+    const replacement = (textOverride ?? editingInferRef.current?.textContent ?? editingInferValue).trim();
+    let count = 0;
+    const newText = editor.text.replace(/\*\*([^*]+)\*\*/g, (match) => {
+      const result = count === idx ? replacement : match;
+      count++;
+      return result;
+    });
+    setEditingInferIdx(-1);
+    setEditingInferValue("");
+    afterInferenceChange(newText);
   }
 
   async function handleDelete(reportId: string) {
@@ -521,35 +654,127 @@ export function ProgressReportsPage({ initialReports, students }: Props) {
                   )}
                 </div>
 
-                {/* Textarea + AI label + word count */}
+                {/* Report text: preview mode (markers) or plain textarea */}
                 <div className="flex-1 min-h-0 flex flex-col gap-1.5">
-                  <Textarea
-                    value={editor.text}
-                    onChange={(e) => setEditor((prev) => ({ ...prev, text: e.target.value }))}
-                    placeholder={
-                      !isEditable
-                        ? "This report has been finalized."
-                        : "Start writing, or click Generate to create an AI-assisted draft from session data."
-                    }
-                    readOnly={!isEditable}
-                    className={cn(
-                      "flex-1 resize-none text-sm leading-relaxed font-sans min-h-0",
-                      !isEditable && "opacity-75 cursor-default"
-                    )}
-                  />
-                  <div className="flex items-center justify-between shrink-0">
-                    {editor.isAiGenerated ? (
-                      <span className="text-xs text-muted-foreground/70 italic flex items-center gap-1">
-                        <Bot className="h-3 w-3" />
-                        AI-generated — review and edit before saving
-                      </span>
-                    ) : <span />}
-                    {editor.text && (
-                      <span className="text-xs text-muted-foreground">
-                        {editor.text.trim().split(/\s+/).filter(Boolean).length} words
-                      </span>
-                    )}
-                  </div>
+                  {reportPreviewMode && editor.text ? (
+                    <>
+                      {/* ── Rendered preview with source + inference highlights ── */}
+                      <div className="flex-1 text-sm leading-relaxed font-sans rounded-md border border-input bg-background px-3 py-2 overflow-y-auto whitespace-pre-wrap" style={{ minHeight: "14rem" }}>
+                        {parseReportSegments(editor.text).map((seg, i) => {
+                          if (seg.type === "text") return <span key={i}>{seg.content}</span>;
+
+                          if (seg.type === "iep") return (
+                            <span key={i} className="inline">
+                              <mark className="bg-blue-100 text-blue-900 rounded px-0.5 font-medium not-italic">
+                                {seg.content}
+                              </mark>
+                              <span className="inline-flex items-center ml-0.5 align-middle">
+                                <span className="text-[9px] font-bold text-blue-600 bg-blue-100 border border-blue-200 rounded px-1 py-px leading-none">IEP</span>
+                              </span>
+                            </span>
+                          );
+
+                          if (seg.type === "note") return (
+                            <span key={i} className="inline">
+                              <mark className="bg-emerald-100 text-emerald-900 rounded px-0.5 font-medium not-italic">
+                                {seg.content}
+                              </mark>
+                              <span className="inline-flex items-center ml-0.5 align-middle">
+                                <span className="text-[9px] font-bold text-emerald-600 bg-emerald-100 border border-emerald-200 rounded px-1 py-px leading-none">NOTE</span>
+                              </span>
+                            </span>
+                          );
+
+                          // type === "inferred"
+                          const isEditing = editingInferIdx === seg.idx;
+                          return (
+                            <span key={i} className="inline">
+                              {isEditing ? (
+                                <>
+                                  <span
+                                    ref={editingInferRef}
+                                    contentEditable
+                                    suppressContentEditableWarning
+                                    dangerouslySetInnerHTML={{ __html: editingInferValue }}
+                                    onKeyDown={(e) => {
+                                      if (e.key === "Enter") { e.preventDefault(); confirmEditInference(seg.idx, e.currentTarget.textContent ?? ""); }
+                                      if (e.key === "Escape") { setEditingInferIdx(-1); setEditingInferValue(""); }
+                                    }}
+                                    className="bg-amber-50 text-amber-900 font-semibold rounded px-0.5 border-b-2 border-amber-400 focus:border-amber-600 focus:outline-none cursor-text"
+                                  />
+                                  <span className="inline-flex items-center gap-0.5 ml-0.5 align-middle">
+                                    <button title="Confirm" onClick={(e) => { e.stopPropagation(); confirmEditInference(seg.idx, editingInferRef.current?.textContent ?? ""); }} className="inline-flex items-center justify-center h-4 w-4 rounded bg-emerald-100 text-emerald-700 border border-emerald-200 hover:bg-emerald-200 transition-colors"><Check className="h-2.5 w-2.5" /></button>
+                                    <button title="Cancel" onClick={(e) => { e.stopPropagation(); setEditingInferIdx(-1); setEditingInferValue(""); }} className="inline-flex items-center justify-center h-4 w-4 rounded bg-muted text-muted-foreground border border-border hover:bg-muted/80 transition-colors"><X className="h-2.5 w-2.5" /></button>
+                                  </span>
+                                </>
+                              ) : (
+                                <>
+                                  <mark className="bg-amber-100 text-amber-900 rounded px-0.5 font-semibold not-italic">{seg.content}</mark>
+                                  <span className="inline-flex items-center gap-0.5 ml-0.5 align-middle">
+                                    <button title="Accept" onClick={(e) => { e.stopPropagation(); acceptInference(seg.idx); }} className="inline-flex items-center justify-center h-4 w-4 rounded bg-emerald-50 text-emerald-600 border border-emerald-200 hover:bg-emerald-100 transition-colors"><Check className="h-2.5 w-2.5" /></button>
+                                    <button title="Edit" onClick={(e) => { e.stopPropagation(); startEditInference(seg.idx, seg.content); }} className="inline-flex items-center justify-center h-4 w-4 rounded bg-blue-50 text-blue-600 border border-blue-200 hover:bg-blue-100 transition-colors"><Pencil className="h-2.5 w-2.5" /></button>
+                                    <button title="Deny" onClick={(e) => { e.stopPropagation(); denyInference(seg.idx); }} className="inline-flex items-center justify-center h-4 w-4 rounded bg-red-50 text-red-500 border border-red-200 hover:bg-red-100 transition-colors"><X className="h-2.5 w-2.5" /></button>
+                                  </span>
+                                </>
+                              )}
+                            </span>
+                          );
+                        })}
+                      </div>
+                      {/* Preview action row */}
+                      <div className="flex items-center gap-3 shrink-0 flex-wrap">
+                        <span className="flex items-center gap-2 text-xs text-muted-foreground">
+                          <span className="flex items-center gap-1"><span className="inline-block h-2.5 w-2.5 rounded-sm bg-amber-200" /> AI inferred</span>
+                          <span className="flex items-center gap-1"><span className="inline-block h-2.5 w-2.5 rounded-sm bg-blue-200" /> From IEP</span>
+                          <span className="flex items-center gap-1"><span className="inline-block h-2.5 w-2.5 rounded-sm bg-emerald-200" /> From session notes</span>
+                        </span>
+                        <div className="ml-auto flex items-center gap-2">
+                          <button
+                            className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-1 transition-colors"
+                            onClick={() => { setEditor((prev) => ({ ...prev, text: stripReportMarkers(prev.text) })); setReportPreviewMode(false); }}
+                          >
+                            <Check className="h-3 w-3" /> Accept all
+                          </button>
+                          <button
+                            className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-1 transition-colors"
+                            onClick={() => setReportPreviewMode(false)}
+                          >
+                            <Pencil className="h-3 w-3" /> Edit
+                          </button>
+                        </div>
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      <Textarea
+                        value={editor.text}
+                        onChange={(e) => setEditor((prev) => ({ ...prev, text: e.target.value }))}
+                        placeholder={
+                          !isEditable
+                            ? "This report has been finalized."
+                            : "Start writing, or click Generate to create an AI-assisted draft from session data."
+                        }
+                        readOnly={!isEditable}
+                        className={cn(
+                          "flex-1 resize-none text-sm leading-relaxed font-sans min-h-0",
+                          !isEditable && "opacity-75 cursor-default"
+                        )}
+                      />
+                      <div className="flex items-center justify-between shrink-0">
+                        {editor.isAiGenerated ? (
+                          <span className="text-xs text-muted-foreground/70 italic flex items-center gap-1">
+                            <Bot className="h-3 w-3" />
+                            AI-generated — review and edit before saving
+                          </span>
+                        ) : <span />}
+                        {editor.text && (
+                          <span className="text-xs text-muted-foreground">
+                            {stripReportMarkers(editor.text).trim().split(/\s+/).filter(Boolean).length} words
+                          </span>
+                        )}
+                      </div>
+                    </>
+                  )}
                 </div>
 
                 {/* Warnings */}
