@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo, useRef } from "react";
+import { useState, useMemo, useRef, useEffect } from "react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { formatDate } from "@/lib/utils/format-date";
@@ -28,6 +28,8 @@ import {
   Check,
   X,
   Pencil,
+  MessageSquare,
+  Send,
 } from "lucide-react";
 
 // ─── Report segment parser ──────────────────────────────────────────────────────
@@ -87,7 +89,9 @@ interface StudentOption {
   id: string;
   firstName: string;
   lastName: string;
-  goals: { id: string }[];
+  gradeLevel?: string | null;
+  schoolName?: string | null;
+  goals: { id: string; shortName?: string | null; goalText: string; domain: string; targetAccuracy: number; status: string }[];
   ieps: { id: string; status: string; reviewDate: string; studentId: string }[];
 }
 
@@ -114,6 +118,244 @@ interface Props {
   students: StudentOption[];
 }
 
+// ─── Types for the chat panel ──────────────────────────────────────────────────
+
+interface ChatMessage {
+  role: "user" | "assistant";
+  content: string;
+}
+
+interface ReportChatContext {
+  studentName: string;
+  gradeLevel?: string | null;
+  schoolName?: string | null;
+  reportPeriod: string;
+  currentDraft: string;
+  goals: Array<{ name: string; domain: string; targetAccuracy: number; status: string }>;
+  sessionCount: number;
+}
+
+// ─── ReportChatPanel ──────────────────────────────────────────────────────────
+
+function ReportChatPanel({
+  context,
+  onClose,
+  onApplyReport,
+}: {
+  context: ReportChatContext;
+  onClose: () => void;
+  onApplyReport: (text: string) => void;
+}) {
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [textInput, setTextInput] = useState("");
+  const [isThinking, setIsThinking] = useState(true);
+  const [pendingReportUpdate, setPendingReportUpdate] = useState<string | null>(null);
+  const [latestReportUpdate, setLatestReportUpdate] = useState<string | null>(null);
+
+  const initRef = useRef(false);
+  const bottomRef = useRef<HTMLDivElement>(null);
+  const textInputRef = useRef<HTMLTextAreaElement>(null);
+  const contextRef = useRef(context);
+  contextRef.current = context;
+
+  useEffect(() => {
+    if (messages.length > 0 || isThinking) {
+      bottomRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    }
+  }, [messages, isThinking]);
+
+  useEffect(() => {
+    if (!initRef.current) {
+      initRef.current = true;
+      sendToAI([]);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  async function sendToAI(history: ChatMessage[]) {
+    setIsThinking(true);
+    try {
+      const res = await fetch("/api/progress-reports/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ messages: history, context: contextRef.current }),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error ?? "AI error");
+
+      const aiMsg: ChatMessage = { role: "assistant", content: json.reply };
+      setMessages((prev) => [...prev, aiMsg]);
+
+      if (json.reportUpdate) {
+        setPendingReportUpdate(json.reportUpdate);
+        setLatestReportUpdate(json.reportUpdate);
+      }
+    } catch {
+      setMessages((prev) => [
+        ...prev,
+        { role: "assistant", content: "Sorry, I had trouble connecting. Please try again." },
+      ]);
+    } finally {
+      setIsThinking(false);
+      setTimeout(() => textInputRef.current?.focus({ preventScroll: true }), 50);
+    }
+  }
+
+  function submitMessage(text: string) {
+    const trimmed = text.trim();
+    if (!trimmed) return;
+    const userMsg: ChatMessage = { role: "user", content: trimmed };
+    const newHistory = [...messages, userMsg];
+    setMessages(newHistory);
+    setTextInput("");
+    setPendingReportUpdate(null);
+    sendToAI(newHistory);
+  }
+
+  function applyReport() {
+    const effective = latestReportUpdate ?? pendingReportUpdate;
+    if (!effective?.trim()) return;
+    onApplyReport(effective);
+    setPendingReportUpdate(null);
+    setLatestReportUpdate(null);
+    setMessages((prev) => [
+      ...prev,
+      { role: "assistant", content: "Report updated. What else would you like to work on?" },
+    ]);
+  }
+
+  return (
+    <div className="rounded-lg border border-violet-200 bg-violet-50/40 overflow-hidden flex flex-col h-full">
+      {/* Header */}
+      <div className="flex items-center justify-between px-3.5 py-2.5 bg-violet-100/60 border-b border-violet-200 shrink-0">
+        <div className="flex items-center gap-2">
+          <div className="flex items-center justify-center h-5 w-5 rounded bg-violet-600/10">
+            <Bot className="h-3.5 w-3.5 text-violet-600" />
+          </div>
+          <span className="text-xs font-semibold text-violet-800">AI Report Assistant</span>
+        </div>
+        <button
+          type="button"
+          onClick={onClose}
+          className="text-violet-400 hover:text-violet-700 transition-colors"
+          aria-label="Close"
+        >
+          <X className="h-4 w-4" />
+        </button>
+      </div>
+
+      {/* Conversation */}
+      <div className="flex-1 overflow-y-auto min-h-0 px-3.5 py-3 space-y-2.5">
+        {messages.length === 0 && isThinking && (
+          <div className="flex items-center gap-2 text-xs text-muted-foreground">
+            <Loader2 className="h-3.5 w-3.5 animate-spin text-violet-500" />
+            Starting…
+          </div>
+        )}
+
+        {messages.map((msg, i) => (
+          <div key={i} className={cn("flex gap-2", msg.role === "user" ? "justify-end" : "justify-start")}>
+            {msg.role === "assistant" && (
+              <div className="shrink-0 h-5 w-5 rounded bg-violet-100 flex items-center justify-center mt-0.5">
+                <Bot className="h-3 w-3 text-violet-600" />
+              </div>
+            )}
+            <div className={cn(
+              "max-w-[88%] rounded-xl px-3 py-2 text-xs leading-relaxed whitespace-pre-wrap",
+              msg.role === "user"
+                ? "bg-primary text-primary-foreground rounded-br-sm"
+                : "bg-white border border-violet-100 text-foreground rounded-bl-sm shadow-sm"
+            )}>
+              {msg.content}
+            </div>
+          </div>
+        ))}
+
+        {isThinking && messages.length > 0 && (
+          <div className="flex items-center gap-2">
+            <div className="h-5 w-5 rounded bg-violet-100 flex items-center justify-center">
+              <Bot className="h-3 w-3 text-violet-600" />
+            </div>
+            <div className="bg-white border border-violet-100 rounded-xl rounded-bl-sm px-3 py-2 shadow-sm">
+              <span className="flex gap-1">
+                <span className="h-1.5 w-1.5 rounded-full bg-violet-400 animate-bounce [animation-delay:-0.3s]" />
+                <span className="h-1.5 w-1.5 rounded-full bg-violet-400 animate-bounce [animation-delay:-0.15s]" />
+                <span className="h-1.5 w-1.5 rounded-full bg-violet-400 animate-bounce" />
+              </span>
+            </div>
+          </div>
+        )}
+
+        <div ref={bottomRef} />
+      </div>
+
+      {/* Apply report update */}
+      {pendingReportUpdate && (
+        <div className="mx-3.5 mb-2 flex gap-2 shrink-0">
+          <Button
+            type="button"
+            size="sm"
+            className="h-7 text-xs gap-1.5 bg-violet-600 hover:bg-violet-700"
+            onClick={applyReport}
+          >
+            <Check className="h-3 w-3" /> Apply to report
+          </Button>
+          <Button
+            type="button"
+            size="sm"
+            variant="ghost"
+            className="h-7 text-xs text-muted-foreground"
+            onClick={() => setPendingReportUpdate(null)}
+          >
+            Dismiss
+          </Button>
+        </div>
+      )}
+
+      {/* Text input */}
+      <div className="border-t border-violet-200 bg-white px-3.5 py-3 shrink-0 space-y-2">
+        <div className="flex gap-2 items-end">
+          <textarea
+            ref={textInputRef}
+            value={textInput}
+            onChange={(e) => setTextInput(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && !e.shiftKey) {
+                e.preventDefault();
+                submitMessage(textInput);
+              }
+            }}
+            placeholder="Ask for help, share notes, or request edits… (Enter to send)"
+            rows={2}
+            disabled={isThinking}
+            className="flex-1 resize-none rounded-md border border-input bg-background px-3 py-2 text-xs leading-relaxed focus:outline-none focus:ring-1 focus:ring-ring disabled:opacity-50"
+          />
+          <button
+            type="button"
+            onClick={() => submitMessage(textInput)}
+            disabled={!textInput.trim() || isThinking}
+            className="flex items-center justify-center h-9 w-9 rounded-md bg-violet-600 text-white hover:bg-violet-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors shrink-0"
+          >
+            <Send className="h-3.5 w-3.5" />
+          </button>
+        </div>
+
+        {/* Persistent apply button — always available once there's a report update */}
+        {latestReportUpdate && !pendingReportUpdate && (
+          <button
+            type="button"
+            onClick={applyReport}
+            className="w-full flex items-center justify-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium bg-violet-600 text-white hover:bg-violet-700 transition-colors"
+          >
+            <Check className="h-3 w-3" />
+            Apply latest draft to report
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // ─── Main component ─────────────────────────────────────────────────────────────
 
 export function ProgressReportsPage({ initialReports, students }: Props) {
@@ -136,6 +378,7 @@ export function ProgressReportsPage({ initialReports, students }: Props) {
   const [metadata, setMetadata] = useState<GenerateMetadata | null>(null);
   const [showHistory, setShowHistory] = useState(false);
   const [isEditingFinalized, setIsEditingFinalized] = useState(false);
+  const [showChat, setShowChat] = useState(false);
   /** true when AI-generated report contains source/inference markers and preview is active */
   const [reportPreviewMode, setReportPreviewMode] = useState(false);
   const [editingInferIdx, setEditingInferIdx] = useState(-1);
@@ -434,8 +677,13 @@ export function ProgressReportsPage({ initialReports, students }: Props) {
         </div>
       </div>
 
-      {/* Two-column layout */}
-      <div className="grid grid-cols-1 lg:grid-cols-[320px_1fr] gap-4 flex-1 min-h-0">
+      {/* Layout: caseload | editor [| chat] */}
+      <div className={cn(
+        "grid grid-cols-1 gap-4 flex-1 min-h-0",
+        showChat
+          ? "lg:grid-cols-[280px_1fr_360px]"
+          : "lg:grid-cols-[320px_1fr]"
+      )}>
 
         {/* ── LEFT: Caseload ── */}
         <Card className="flex flex-col min-h-0">
@@ -670,6 +918,23 @@ export function ProgressReportsPage({ initialReports, students }: Props) {
                       Edit
                     </Button>
                   )}
+                  {/* Chat with AI — always available when a student is selected */}
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    disabled={!selectedStudentId}
+                    onClick={() => setShowChat((v) => !v)}
+                    className={cn(
+                      "gap-1.5 h-8 text-xs",
+                      showChat
+                        ? "text-violet-700 bg-violet-50 hover:bg-violet-100"
+                        : "text-violet-500 hover:text-violet-700 hover:bg-violet-50"
+                    )}
+                  >
+                    <MessageSquare className="h-3.5 w-3.5" />
+                    {showChat ? "Hide AI" : "Chat with AI"}
+                  </Button>
+
                   {metadata && (
                     <span className="ml-auto text-xs text-muted-foreground">
                       {metadata.sessionCount} session{metadata.sessionCount !== 1 ? "s" : ""} · {metadata.goalsUsed.length} goal{metadata.goalsUsed.length !== 1 ? "s" : ""}
@@ -831,6 +1096,37 @@ export function ProgressReportsPage({ initialReports, students }: Props) {
             </>
           )}
         </div>
+
+        {/* ── RIGHT: AI Chat Panel ── */}
+        {showChat && selectedStudent && (
+          <div className="flex flex-col min-h-0">
+            <ReportChatPanel
+              context={{
+                studentName: `${selectedStudent.firstName} ${selectedStudent.lastName}`,
+                gradeLevel: selectedStudent.gradeLevel,
+                schoolName: selectedStudent.schoolName,
+                reportPeriod: editor.startDate && editor.endDate
+                  ? `${formatDate(editor.startDate)} – ${formatDate(editor.endDate)}`
+                  : "Not specified",
+                currentDraft: stripReportMarkers(editor.text),
+                goals: selectedStudent.goals.map(g => ({
+                  name: g.shortName ?? g.goalText.slice(0, 60),
+                  domain: g.domain,
+                  targetAccuracy: g.targetAccuracy,
+                  status: g.status,
+                })),
+                sessionCount: metadata?.sessionCount ?? 0,
+              }}
+              onClose={() => setShowChat(false)}
+              onApplyReport={(text) => {
+                setEditor((prev) => ({ ...prev, text, isAiGenerated: true }));
+                setReportPreviewMode(hasReportMarkers(text));
+                setEditingInferIdx(-1);
+                toast.success("Report draft updated from AI.");
+              }}
+            />
+          </div>
+        )}
 
       </div>
     </div>

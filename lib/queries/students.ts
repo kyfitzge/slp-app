@@ -16,7 +16,14 @@ export async function getStudentsByUserId(userId: string) {
       },
       goals: {
         where: { status: "ACTIVE" },
-        select: { id: true },
+        select: {
+          id: true,
+          shortName: true,
+          goalText: true,
+          domain: true,
+          targetAccuracy: true,
+          status: true,
+        },
       },
     },
     orderBy: [{ lastName: "asc" }, { firstName: "asc" }],

@@ -27,7 +27,16 @@ export default async function ProgressReportsRoute() {
     id: s.id,
     firstName: s.firstName,
     lastName: s.lastName,
-    goals: s.goals,
+    gradeLevel: s.gradeLevel ?? null,
+    schoolName: s.schoolName ?? null,
+    goals: s.goals.map((g) => ({
+      id: g.id,
+      shortName: g.shortName ?? null,
+      goalText: g.goalText,
+      domain: g.domain,
+      targetAccuracy: g.targetAccuracy,
+      status: g.status,
+    })),
     ieps: s.ieps.map((iep) => ({
       id: iep.id,
       status: iep.status,
