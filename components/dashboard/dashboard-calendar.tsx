@@ -505,7 +505,7 @@ function TimeGridView({
                 {/* Current-time indicator — only on today's column */}
                 {isToday(day) && nowPx !== null && (
                   <div
-                    className="absolute left-0 right-0 z-30 pointer-events-none"
+                    className="absolute left-0 right-0 z-20 pointer-events-none"
                     style={{ top: nowPx }}
                   >
                     {/* Dot on the left edge */}
