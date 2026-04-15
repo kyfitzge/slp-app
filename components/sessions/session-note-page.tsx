@@ -1824,8 +1824,17 @@ export function SessionNotePage({
   const isGroup = students.length > 1;
   const [activeStudentId, setActiveStudentId] = useState(students[0]?.id ?? "");
   const [studentNoteDrafts, setStudentNoteDrafts] = useState<Record<string, string>>(() => {
-    if (isGroup && initialNotes) {
-      return Object.fromEntries(students.map(s => [s.id, initialNotes[s.id] ?? ""]));
+    if (isGroup) {
+      const perStudentNotes = Object.fromEntries(
+        students.map(s => [s.id, initialNotes?.[s.id] ?? ""])
+      );
+      // If no per-student notes exist yet but there IS a legacy combined note,
+      // seed each student's tab with the combined text so nothing is lost.
+      const hasAnyPerStudent = students.some(s => perStudentNotes[s.id]);
+      if (!hasAnyPerStudent && initialNote.trim()) {
+        return Object.fromEntries(students.map(s => [s.id, initialNote]));
+      }
+      return perStudentNotes;
     }
     return { "": initialNote };
   });

@@ -127,21 +127,30 @@ export async function upsertSessionNote(
   noteText: string,
   studentId?: string
 ) {
-  // Upsert: create or update note for this session (+ optional studentId)
-  const existing = await prisma.sessionNote.findFirst({
-    where: { sessionId, studentId: studentId ?? null },
-  });
+  return prisma.$transaction(async (tx) => {
+    // When saving a per-student note, remove any combined (session-wide) note
+    // that may have been created before per-student notes were introduced.
+    if (studentId) {
+      await tx.sessionNote.deleteMany({
+        where: { sessionId, studentId: null },
+      });
+    }
 
-  if (existing) {
-    if (existing.isLocked) throw new Error("Note is locked and cannot be edited");
-    return prisma.sessionNote.update({
-      where: { id: existing.id },
-      data: { noteText },
+    const existing = await tx.sessionNote.findFirst({
+      where: { sessionId, studentId: studentId ?? null },
     });
-  }
 
-  return prisma.sessionNote.create({
-    data: { sessionId, studentId: studentId ?? null, noteText },
+    if (existing) {
+      if (existing.isLocked) throw new Error("Note is locked and cannot be edited");
+      return tx.sessionNote.update({
+        where: { id: existing.id },
+        data: { noteText },
+      });
+    }
+
+    return tx.sessionNote.create({
+      data: { sessionId, studentId: studentId ?? null, noteText },
+    });
   });
 }
 
