@@ -347,8 +347,10 @@ export function LessonPlanningPage({ students }: Props) {
 
   function handleRemoveStudent(id: string) {
     setAdditionalStudentIds(prev => prev.filter(sid => sid !== id));
+    // Keep the plan text — removing one student from the group should not
+    // wipe the draft. Clear activePlan so the unsaved state is obvious,
+    // but preserve whatever the SLP has already written.
     setActivePlan(null);
-    setPlanText("");
   }
 
   // ── Generate ───────────────────────────────────────────────────────────────
