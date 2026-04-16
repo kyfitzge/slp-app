@@ -9,7 +9,7 @@ function useBreadcrumbs() {
   const segments = pathname.split("/").filter(Boolean);
 
   const labels: Record<string, string> = {
-    dashboard: "Dashboard",
+    dashboard: "Schedule",
     students: "Students",
     schedule: "Schedule",
     sessions: "Session Notes",
