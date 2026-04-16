@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { requireUser } from "@/lib/auth/get-user";
 import { getSessionById } from "@/lib/queries/sessions";
 import { prisma } from "@/lib/db";
+import { syncSessionToCalendars } from "@/lib/services/calendar-sync";
 
 export async function GET(
   _req: Request,
@@ -43,6 +44,7 @@ export async function PUT(
       where: { id: sessionId, userId: user.id },
       data,
     });
+    syncSessionToCalendars(sessionId, user.id, "upsert").catch(console.error);
     return NextResponse.json({ session });
   } catch {
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });
@@ -66,6 +68,8 @@ export async function DELETE(
       return NextResponse.json({ error: "Not found" }, { status: 404 });
     }
 
+    // Sync delete BEFORE removing the session so SessionExternalEvent rows still exist
+    await syncSessionToCalendars(sessionId, user.id, "delete").catch(console.error);
     await prisma.session.delete({ where: { id: sessionId } });
     return NextResponse.json({ success: true });
   } catch {

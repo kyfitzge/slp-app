@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { requireUser } from "@/lib/auth/get-user";
 import { getSessionsByUserId, getSessionsForCalendar, createSession } from "@/lib/queries/sessions";
 import { createSessionSchema } from "@/lib/validations/session";
+import { syncSessionToCalendars } from "@/lib/services/calendar-sync";
 import { z } from "zod";
 
 export async function GET(request: Request) {
@@ -36,6 +37,8 @@ export async function POST(request: Request) {
     const body = await request.json();
     const data = createSessionSchema.parse(body);
     const session = await createSession(data, user.id);
+    // Fire-and-forget — sync failure never blocks the response
+    syncSessionToCalendars(session.id, user.id, "upsert").catch(console.error);
     return NextResponse.json({ session }, { status: 201 });
   } catch (err) {
     if (err instanceof z.ZodError) {
