@@ -20,7 +20,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: { default: "SLP Workflow", template: "%s · SLP Workflow" },
+  title: { default: "SpeechEd", template: "%s · SpeechEd" },
   description: "Workflow tool for school-based Speech-Language Pathologists",
 };
 

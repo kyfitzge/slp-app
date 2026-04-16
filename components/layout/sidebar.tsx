@@ -48,7 +48,7 @@ export function Sidebar({ userInitials = "SLP", userName }: SidebarProps) {
           <Activity className="h-3.5 w-3.5 text-primary-foreground" />
         </div>
         <span className="text-sm font-semibold tracking-tight text-foreground">
-          SLP Workflow
+          SpeechEd
         </span>
       </div>
 
