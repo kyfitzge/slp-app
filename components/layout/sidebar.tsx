@@ -8,9 +8,9 @@ import {
   FileText,
   Settings,
   LogOut,
-  Activity,
   BookOpen,
 } from "lucide-react";
+import { LlamaIcon } from "@/components/icons/llama-icon";
 import { cn } from "@/lib/utils";
 import { createClient } from "@/lib/supabase/client";
 import { useRouter } from "next/navigation";
@@ -45,7 +45,7 @@ export function Sidebar({ userInitials = "SLP", userName }: SidebarProps) {
       {/* Logo / wordmark */}
       <div className="flex h-14 items-center gap-2.5 border-b border-sidebar-border px-4">
         <div className="flex h-6 w-6 items-center justify-center rounded-md bg-primary/90">
-          <Activity className="h-3.5 w-3.5 text-primary-foreground" />
+          <LlamaIcon className="h-3.5 w-3.5 text-primary-foreground" />
         </div>
         <span className="text-sm font-semibold tracking-tight text-foreground">
           SpeechEd
