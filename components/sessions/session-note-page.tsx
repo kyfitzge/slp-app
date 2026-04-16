@@ -678,7 +678,7 @@ interface EditableFieldRowProps {
   /** Formatted display value shown when not editing. */
   displayValue?: React.ReactNode;
   missing?: boolean;
-  editType?: "text" | "select";
+  editType?: "text" | "select" | "time";
   editOptions?: { value: string; label: string }[];
   placeholder?: string;
   onSave: (raw: string) => void;
@@ -729,6 +729,16 @@ function EditableFieldRow({
                 <option key={o.value} value={o.value}>{o.label}</option>
               ))}
             </select>
+          ) : editType === "time" ? (
+            <input
+              type="time"
+              value={draft}
+              onChange={(e) => setDraft(e.target.value)}
+              onBlur={commit}
+              onKeyDown={(e) => { if (e.key === "Enter") commit(); if (e.key === "Escape") { setDraft(rawValue); setEditing(false); } }}
+              autoFocus
+              className="text-sm border border-input rounded px-2 py-0.5 bg-background focus:outline-none focus:ring-1 focus:ring-ring"
+            />
           ) : (
             <input
               type="text"
@@ -1850,6 +1860,7 @@ export function SessionNotePage({
   const [locationOverride, setLocationOverride] = useState<string | null>(null);
   const [durationOverride, setDurationOverride] = useState<number | null>(null);
   const [sessionTypeOverride, setSessionTypeOverride] = useState<string | null>(null);
+  const [startTimeOverride, setStartTimeOverride] = useState<string | null>(null);
 
   async function saveLocation(value: string) {
     const trimmed = value.trim() || null;
@@ -1890,6 +1901,20 @@ export function SessionNotePage({
       });
     } catch {
       toast.error("Failed to save session type");
+    }
+  }
+
+  async function saveStartTime(value: string) {
+    const trimmed = value.trim() || null;
+    setStartTimeOverride(trimmed);
+    try {
+      await fetch(`/api/sessions/${sessionId}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ startTime: trimmed }),
+      });
+    } catch {
+      toast.error("Failed to save start time");
     }
   }
   // For group sessions combine all students' note drafts so goal extraction works
@@ -2371,6 +2396,7 @@ export function SessionNotePage({
   // Use || instead of ?? so empty strings ("") also fall through to the next source
   const effectiveLocation = locationOverride || location || extracted.setting || null;
   const effectiveSessionType = sessionTypeOverride || sessionType;
+  const effectiveStartTime = startTimeOverride !== null ? startTimeOverride : (startTime ?? null);
 
   const missingLabels: string[] = [];
   if (!effectiveLocation) missingLabels.push("Setting");
@@ -2449,8 +2475,8 @@ export function SessionNotePage({
             <div className="flex items-center gap-1.5 text-sm">
               <CalendarDays className="h-4 w-4 text-muted-foreground shrink-0" />
               <span className="font-semibold">{formatDate(new Date(sessionDate))}</span>
-              {startTime && (
-                <span className="text-muted-foreground">· {formatTime(startTime)}</span>
+              {effectiveStartTime && (
+                <span className="text-muted-foreground">· {formatTime(effectiveStartTime)}</span>
               )}
             </div>
             {effectiveDuration && (
@@ -2771,6 +2797,16 @@ export function SessionNotePage({
                 </p>
                 <div className="rounded-lg border divide-y">
                   <FieldRow icon={CalendarDays} label="Date" value={formatDate(new Date(sessionDate))} />
+                  <EditableFieldRow
+                    icon={Clock}
+                    label="Time"
+                    rawValue={effectiveStartTime ?? ""}
+                    displayValue={effectiveStartTime ? formatTime(effectiveStartTime) : undefined}
+                    missing={!effectiveStartTime}
+                    editType="time"
+                    placeholder="e.g. 09:30"
+                    onSave={saveStartTime}
+                  />
                   <EditableFieldRow
                     icon={Clock}
                     label="Duration"
