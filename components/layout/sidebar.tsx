@@ -10,6 +10,7 @@ import {
   LogOut,
   BookOpen,
   ClipboardCheck,
+  GraduationCap,
 } from "lucide-react";
 import { LlamaIcon } from "@/components/icons/llama-icon";
 import { cn } from "@/lib/utils";
@@ -19,6 +20,7 @@ import { toast } from "sonner";
 
 const navItems = [
   { href: "/dashboard",        label: "Schedule",         icon: LayoutDashboard },
+  { href: "/students",         label: "Students",         icon: GraduationCap   },
   { href: "/sessions",         label: "Session Notes",    icon: ClipboardList   },
   { href: "/progress-reports", label: "Progress Reports", icon: FileText        },
   { href: "/lesson-planning",  label: "Lesson Planning",  icon: BookOpen        },
@@ -61,6 +63,8 @@ export function Sidebar({ userInitials = "SLP", userName }: SidebarProps) {
             const isActive =
               href === "/dashboard"
                 ? pathname === "/dashboard"
+                : href === "/students"
+                ? pathname === "/students"
                 : pathname.startsWith(href);
             return (
               <li key={href}>
