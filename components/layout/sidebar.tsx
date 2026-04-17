@@ -20,7 +20,7 @@ import { toast } from "sonner";
 
 const navItems = [
   { href: "/dashboard",        label: "Schedule",         icon: LayoutDashboard },
-  { href: "/students",         label: "Students",         icon: GraduationCap   },
+  { href: "/students",         label: "Students IEP",     icon: GraduationCap   },
   { href: "/sessions",         label: "Session Notes",    icon: ClipboardList   },
   { href: "/progress-reports", label: "Progress Reports", icon: FileText        },
   { href: "/lesson-planning",  label: "Lesson Planning",  icon: BookOpen        },
