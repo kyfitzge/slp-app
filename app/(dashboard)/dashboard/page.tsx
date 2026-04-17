@@ -4,11 +4,10 @@ import { requireUser } from "@/lib/auth/get-user";
 import { getStudentsByUserId } from "@/lib/queries/students";
 import { getUpcomingIEPReviews } from "@/lib/queries/ieps";
 import { getSessionsForCalendar } from "@/lib/queries/sessions";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { CaseloadSidePanel } from "@/components/shared/caseload-side-panel";
 import { DashboardCalendar } from "@/components/dashboard/dashboard-calendar";
-import { AlertTriangle, Calendar, Plus, Users } from "lucide-react";
+import { AlertTriangle, Calendar, Plus } from "lucide-react";
 import { getUrgencyLevel } from "@/lib/utils/format-date";
 import { cn } from "@/lib/utils";
 
@@ -68,26 +67,23 @@ export default async function DashboardPage() {
       </div>
 
       {/* ── Two-column layout: Caseload | Calendar ── */}
-      <div className="grid grid-cols-1 lg:grid-cols-[320px_1fr] gap-4 flex-1 min-h-0">
+      <div className="flex flex-1 min-h-0 overflow-hidden rounded-xl border bg-card">
 
         {/* LEFT: Caseload */}
-        <Card className="flex flex-col min-h-0">
-          <CardHeader className="pb-3 shrink-0">
-            <CardTitle className="text-sm font-semibold flex items-center justify-between">
-              <span className="flex items-center gap-2">
-                <Users className="h-4 w-4" />
-                Caseload
-              </span>
+        <aside className="w-64 shrink-0 flex flex-col border-r bg-sidebar overflow-hidden">
+          <div className="px-4 pt-4 pb-3 border-b shrink-0">
+            <div className="flex items-center justify-between">
+              <span className="text-sm font-semibold text-foreground">Caseload</span>
               <Link
                 href="/students/new"
                 className="text-xs text-primary font-normal hover:underline flex items-center gap-1"
               >
                 <Plus className="h-3 w-3" />
-                Add student
+                Add
               </Link>
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="flex-1 min-h-0 overflow-hidden pt-0 flex flex-col">
+            </div>
+          </div>
+          <div className="flex-1 overflow-hidden flex flex-col px-2 py-2">
             <CaseloadSidePanel
               draggable
               students={students.map(s => ({
@@ -103,18 +99,18 @@ export default async function DashboardPage() {
                 })),
               }))}
             />
-          </CardContent>
-        </Card>
+          </div>
+        </aside>
 
         {/* RIGHT: Calendar */}
-        <Card className="flex flex-col min-h-0 overflow-hidden">
-          <CardHeader className="pb-3 shrink-0">
-            <CardTitle className="text-sm font-semibold flex items-center gap-2">
-              <Calendar className="h-4 w-4" />
+        <div className="flex-1 min-h-0 overflow-hidden flex flex-col">
+          <div className="px-4 py-3 border-b shrink-0">
+            <span className="text-sm font-semibold flex items-center gap-2">
+              <Calendar className="h-4 w-4 text-muted-foreground" />
               Schedule
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="flex-1 min-h-0 overflow-hidden pt-0">
+            </span>
+          </div>
+          <div className="flex-1 min-h-0 overflow-hidden">
             <DashboardCalendar
               initialSessions={initialSessions.map(s => ({
                 id:             s.id,
@@ -132,8 +128,8 @@ export default async function DashboardPage() {
                 lastName:  s.lastName,
               }))}
             />
-          </CardContent>
-        </Card>
+          </div>
+        </div>
 
       </div>
     </div>

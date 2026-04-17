@@ -9,12 +9,10 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { CaseloadSidePanel } from "@/components/shared/caseload-side-panel";
 import {
   Sparkles,
   FileText,
-  Users,
   AlertTriangle,
   Info,
   Loader2,
@@ -692,31 +690,31 @@ export function ProgressReportsPage({ initialReports, students }: Props) {
 
       {/* Layout: caseload | editor [| chat] */}
       <div className={cn(
-        "grid grid-cols-1 gap-4 flex-1 min-h-0",
-        showChat
-          ? "lg:grid-cols-[320px_1fr_360px]"
-          : "lg:grid-cols-[320px_1fr]"
+        "flex flex-1 min-h-0 overflow-hidden rounded-xl border bg-card",
       )}>
 
         {/* ── LEFT: Caseload ── */}
-        <Card className="flex flex-col min-h-0">
-          <CardHeader className="pb-3 shrink-0">
-            <CardTitle className="text-sm font-semibold flex items-center gap-2">
-              <Users className="h-4 w-4" />
-              Caseload
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="flex-1 min-h-0 overflow-hidden pt-0 flex flex-col">
+        <aside className="w-64 shrink-0 flex flex-col border-r bg-sidebar overflow-hidden">
+          <div className="px-4 pt-4 pb-3 border-b shrink-0">
+            <div className="flex items-center justify-between">
+              <span className="text-sm font-semibold text-foreground">Caseload</span>
+              <Badge variant="secondary" className="text-xs">{students.length}</Badge>
+            </div>
+          </div>
+          <div className="flex-1 overflow-hidden flex flex-col px-2 py-2">
             <CaseloadSidePanel
               students={students}
               selectedId={selectedStudentId}
               onSelect={handleSelectStudent}
             />
-          </CardContent>
-        </Card>
+          </div>
+        </aside>
 
         {/* ── RIGHT: Editor ── */}
-        <div className="flex flex-col min-h-0 overflow-hidden rounded-xl border bg-card">
+        <div className={cn(
+          "flex flex-col flex-1 min-h-0 overflow-hidden",
+          showChat && "border-r"
+        )}>
           {!selectedStudentId ? (
             <div className="flex-1 flex flex-col items-center justify-center text-center p-8">
               <PenLine className="h-10 w-10 text-muted-foreground/20 mb-3" />
@@ -1112,7 +1110,7 @@ export function ProgressReportsPage({ initialReports, students }: Props) {
 
         {/* ── RIGHT: AI Chat Panel ── */}
         {showChat && selectedStudent && (
-          <div className="flex flex-col min-h-0">
+          <div className="flex flex-col min-h-0 w-[360px] shrink-0">
             <ReportChatPanel
               context={{
                 studentId: selectedStudent.id,

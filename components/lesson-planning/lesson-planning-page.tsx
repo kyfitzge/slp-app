@@ -10,7 +10,6 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { CaseloadSidePanel } from "@/components/shared/caseload-side-panel";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Select,
   SelectContent,
@@ -35,7 +34,6 @@ import {
   Save,
   ClipboardList,
   History,
-  Users,
   UserPlus,
   X,
 } from "lucide-react";
@@ -540,18 +538,18 @@ export function LessonPlanningPage({ students }: Props) {
         </div>
       </div>
 
-      {/* ── Grid: caseload | main ── */}
-      <div className="grid grid-cols-1 lg:grid-cols-[320px_1fr] gap-4 flex-1 min-h-0">
+      {/* ── Two-panel layout: caseload | main ── */}
+      <div className="flex flex-1 min-h-0 overflow-hidden rounded-xl border bg-card">
 
-        {/* ── LEFT: Caseload card ── */}
-        <Card className="flex flex-col min-h-0">
-          <CardHeader className="pb-3 shrink-0">
-            <CardTitle className="text-sm font-semibold flex items-center gap-2">
-              <Users className="h-4 w-4" />
-              Caseload
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="flex-1 min-h-0 overflow-hidden pt-0 flex flex-col">
+        {/* ── LEFT: Caseload ── */}
+        <aside className="w-64 shrink-0 flex flex-col border-r bg-sidebar overflow-hidden">
+          <div className="px-4 pt-4 pb-3 border-b shrink-0">
+            <div className="flex items-center justify-between">
+              <span className="text-sm font-semibold text-foreground">Caseload</span>
+              <Badge variant="secondary" className="text-xs">{students.length}</Badge>
+            </div>
+          </div>
+          <div className="flex-1 overflow-hidden flex flex-col px-2 py-2">
             <CaseloadSidePanel
               students={students}
               selectedId={selectedStudentId}
@@ -562,11 +560,11 @@ export function LessonPlanningPage({ students }: Props) {
                 return count ? `${count} plan${count !== 1 ? "s" : ""}` : null;
               }}
             />
-          </CardContent>
-        </Card>
+          </div>
+        </aside>
 
-        {/* ── RIGHT: Main content card ── */}
-        <div className="flex flex-col min-h-0 overflow-hidden rounded-xl border bg-card">
+        {/* ── RIGHT: Main content ── */}
+        <div className="flex flex-col flex-1 min-h-0 overflow-hidden">
           {!selectedStudent ? (
             /* ── Empty state ── */
             <div

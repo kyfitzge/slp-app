@@ -7,7 +7,6 @@ import { cn } from "@/lib/utils";
 import { formatDate, formatTime } from "@/lib/utils/format-date";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { CaseloadSidePanel, type CaseloadStudent } from "@/components/shared/caseload-side-panel";
 import {
   ClipboardList,
@@ -18,7 +17,6 @@ import {
   CircleAlert,
   Ban,
   BarChart2,
-  Users,
 } from "lucide-react";
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
@@ -279,18 +277,18 @@ export function SessionsPageClient({ sessions, students, needsNoteCount }: Props
         </Button>
       </div>
 
-      {/* Two-column layout */}
-      <div className="grid grid-cols-1 lg:grid-cols-[320px_1fr] gap-4 flex-1 min-h-0">
+      {/* Two-panel layout */}
+      <div className="flex flex-1 min-h-0 overflow-hidden rounded-xl border bg-card">
 
         {/* ── LEFT: Caseload ── */}
-        <Card className="flex flex-col min-h-0">
-          <CardHeader className="pb-3 shrink-0">
-            <CardTitle className="text-sm font-semibold flex items-center gap-2">
-              <Users className="h-4 w-4" />
-              Caseload
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="flex-1 min-h-0 overflow-hidden pt-0 flex flex-col">
+        <aside className="w-64 shrink-0 flex flex-col border-r bg-sidebar overflow-hidden">
+          <div className="px-4 pt-4 pb-3 border-b shrink-0">
+            <div className="flex items-center justify-between mb-3">
+              <span className="text-sm font-semibold text-foreground">Caseload</span>
+              <Badge variant="secondary" className="text-xs">{students.length}</Badge>
+            </div>
+          </div>
+          <div className="flex-1 overflow-hidden flex flex-col px-2 py-2">
             <CaseloadSidePanel
               students={students}
               selectedId={selectedStudentId}
@@ -299,22 +297,22 @@ export function SessionsPageClient({ sessions, students, needsNoteCount }: Props
                 setStatusFilter("all");
               }}
             />
-          </CardContent>
-        </Card>
+          </div>
+        </aside>
 
         {/* ── RIGHT: Sessions list ── */}
-        <Card className="flex flex-col min-h-0 overflow-hidden">
+        <div className="flex flex-col flex-1 min-h-0 overflow-hidden">
           {/* Header */}
-          <CardHeader className="pb-3 shrink-0 border-b">
-            <div className="flex items-center justify-between">
-              <CardTitle className="text-sm font-semibold">
+          <div className="flex items-center justify-between px-4 py-3 border-b shrink-0">
+            <div className="flex items-center gap-3">
+              <span className="text-sm font-semibold">
                 {selectedStudentId
                   ? (() => {
                       const s = students.find((st) => st.id === selectedStudentId);
                       return s ? `${s.firstName} ${s.lastName}` : "Sessions";
                     })()
                   : "All Sessions"}
-              </CardTitle>
+              </span>
               {selectedStudentId && (
                 <button
                   onClick={() => setSelectedStudentId(null)}
@@ -324,9 +322,8 @@ export function SessionsPageClient({ sessions, students, needsNoteCount }: Props
                 </button>
               )}
             </div>
-
             {/* Status filter tabs */}
-            <div className="flex gap-1.5 flex-wrap mt-2">
+            <div className="flex gap-1.5 flex-wrap">
               {statusTabs.map((tab) => (
                 <button
                   key={tab.key}
@@ -339,7 +336,7 @@ export function SessionsPageClient({ sessions, students, needsNoteCount }: Props
                         : "bg-primary text-primary-foreground border-primary"
                       : tab.urgent
                       ? "bg-amber-50 text-amber-700 border-amber-200 hover:bg-amber-100"
-                      : "bg-card text-muted-foreground border-border hover:bg-muted hover:text-foreground"
+                      : "bg-transparent text-muted-foreground border-border hover:bg-muted hover:text-foreground"
                   )}
                 >
                   {tab.label}
@@ -347,10 +344,10 @@ export function SessionsPageClient({ sessions, students, needsNoteCount }: Props
                 </button>
               ))}
             </div>
-          </CardHeader>
+          </div>
 
           {/* Sessions list */}
-          <CardContent className="flex-1 min-h-0 overflow-y-auto pt-0 px-0">
+          <div className="flex-1 min-h-0 overflow-y-auto">
             {displayed.length === 0 ? (
               <div className="flex flex-col items-center justify-center py-16 text-center px-6">
                 <ClipboardList className="h-10 w-10 text-muted-foreground/20 mb-3" />
@@ -373,7 +370,6 @@ export function SessionsPageClient({ sessions, students, needsNoteCount }: Props
               </div>
             ) : (
               <>
-                {/* Column headers */}
                 <div className="hidden sm:grid grid-cols-[7rem_1fr_auto] px-4 py-2 border-b bg-muted/30 text-xs font-medium text-muted-foreground">
                   <span>Status</span>
                   <span>Session</span>
@@ -386,9 +382,8 @@ export function SessionsPageClient({ sessions, students, needsNoteCount }: Props
                 </p>
               </>
             )}
-          </CardContent>
-        </Card>
-
+          </div>
+        </div>
       </div>
     </div>
   );
