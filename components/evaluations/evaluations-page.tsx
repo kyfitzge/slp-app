@@ -422,91 +422,109 @@ export function EvaluationsPage({
   // ─────────────────────────────────────────────────────────────────────────
 
   return (
-    <div className="flex h-full overflow-hidden -mx-8 -my-7">
-      {/* ── Left: Caseload ────────────────────────────────────────────────── */}
-      <aside className="w-64 shrink-0 flex flex-col border-r bg-sidebar overflow-hidden">
-        <div className="px-4 pt-4 pb-3 border-b">
-          <div className="flex items-center justify-between mb-3">
-            <span className="text-sm font-semibold text-foreground">Caseload</span>
-            <Badge variant="secondary" className="text-xs">
-              {students.length}
-            </Badge>
-          </div>
-          <div className="relative">
-            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
-            <Input
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search students…"
-              className="pl-8 h-8 text-xs"
-            />
-          </div>
+    <div className="flex flex-col h-full max-w-[1600px]">
+      {/* ── Page header ──────────────────────────────────────────────────── */}
+      <div className="flex items-center justify-between mb-4 shrink-0">
+        <div>
+          <h1 className="text-xl font-semibold">Evaluations</h1>
+          <p className="text-sm text-muted-foreground mt-0.5">
+            Draft and manage evaluation reports
+          </p>
         </div>
+      </div>
 
-        <div className="flex-1 overflow-y-auto py-2">
-          {filteredStudents.length === 0 && (
-            <p className="text-xs text-muted-foreground px-4 py-6 text-center">
-              No students found
-            </p>
-          )}
-          {filteredStudents.map((student) => {
-            const active = student.id === selectedStudentId;
-            const reevalSoon = isReevalSoon(student.reevaluationDue);
-            return (
-              <button
-                key={student.id}
-                onClick={() => setSelectedStudentId(student.id)}
-                className={cn(
-                  "w-full flex items-center gap-3 px-3 py-2.5 text-left transition-colors border-l-2",
-                  active
-                    ? "bg-primary/10 border-primary"
-                    : "border-transparent hover:bg-sidebar-accent"
-                )}
-              >
-                <div
-                  className={cn(
-                    "flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xs font-semibold",
-                    active
-                      ? "bg-primary text-primary-foreground"
-                      : "bg-primary/10 text-primary"
-                  )}
-                >
-                  {getInitials(student.firstName, student.lastName)}
-                </div>
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-center gap-1.5">
-                    <span
+      {/* ── Two-panel layout ─────────────────────────────────────────────── */}
+      <div className="flex flex-1 min-h-0 overflow-hidden rounded-xl border bg-card">
+
+        {/* ── Left: Caseload ─────────────────────────────────────────────── */}
+        <aside className="w-64 shrink-0 flex flex-col border-r bg-sidebar overflow-hidden">
+          <div className="px-4 pt-4 pb-3 border-b shrink-0">
+            <div className="flex items-center justify-between">
+              <span className="text-sm font-semibold text-foreground">Caseload</span>
+              <Badge variant="secondary" className="text-xs">
+                {students.length}
+              </Badge>
+            </div>
+          </div>
+
+          <div className="flex-1 overflow-hidden flex flex-col px-2 py-2">
+            {/* Search */}
+            <div className="relative mb-2 shrink-0">
+              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+              <Input
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Search students…"
+                className="pl-8 h-8 text-xs"
+              />
+            </div>
+
+            {/* Student list */}
+            <div className="flex-1 overflow-y-auto">
+              {filteredStudents.length === 0 && (
+                <p className="text-xs text-muted-foreground px-2 py-6 text-center">
+                  No students found
+                </p>
+              )}
+              {filteredStudents.map((student) => {
+                const active = student.id === selectedStudentId;
+                const reevalSoon = isReevalSoon(student.reevaluationDue);
+                return (
+                  <button
+                    key={student.id}
+                    onClick={() => setSelectedStudentId(student.id)}
+                    className={cn(
+                      "w-full flex items-center gap-3 px-3 py-2.5 text-left transition-colors border-l-2",
+                      active
+                        ? "bg-primary/10 border-primary"
+                        : "border-transparent hover:bg-sidebar-accent"
+                    )}
+                  >
+                    <div
                       className={cn(
-                        "text-xs font-medium truncate",
-                        active ? "text-primary" : "text-foreground"
+                        "flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xs font-semibold",
+                        active
+                          ? "bg-primary text-primary-foreground"
+                          : "bg-primary/10 text-primary"
                       )}
                     >
-                      {student.firstName} {student.lastName}
-                    </span>
-                    {reevalSoon && (
-                      <span
-                        className="shrink-0 inline-block w-1.5 h-1.5 rounded-full bg-amber-500"
-                        title="Re-evaluation due soon"
-                      />
-                    )}
-                  </div>
-                  <span className="text-[10px] text-muted-foreground truncate block">
-                    {formatGrade(student.gradeLevel)}
-                    {student.gradeLevel && student.disabilityCategory ? " · " : ""}
-                    {formatDisability(student.disabilityCategory)}
-                  </span>
-                </div>
-              </button>
-            );
-          })}
-        </div>
-      </aside>
+                      {getInitials(student.firstName, student.lastName)}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-1.5">
+                        <span
+                          className={cn(
+                            "text-xs font-medium truncate",
+                            active ? "text-primary" : "text-foreground"
+                          )}
+                        >
+                          {student.firstName} {student.lastName}
+                        </span>
+                        {reevalSoon && (
+                          <span
+                            className="shrink-0 inline-block w-1.5 h-1.5 rounded-full bg-amber-500"
+                            title="Re-evaluation due soon"
+                          />
+                        )}
+                      </div>
+                      <span className="text-[10px] text-muted-foreground truncate block">
+                        {formatGrade(student.gradeLevel)}
+                        {student.gradeLevel && student.disabilityCategory ? " · " : ""}
+                        {formatDisability(student.disabilityCategory)}
+                      </span>
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        </aside>
 
-      {/* ── Right: Workspace ─────────────────────────────────────────────── */}
-      <main className="flex-1 overflow-y-auto">
+        {/* ── Right: Workspace ───────────────────────────────────────────── */}
+        <main className="flex flex-col flex-1 min-h-0 overflow-hidden">
         {!selectedStudent ? (
           /* Empty state */
-          <div className="flex flex-col items-center justify-center h-full gap-3 text-center p-8">
+          <div className="flex flex-col items-center justify-center flex-1 gap-3 text-center p-8">
             <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-primary/10">
               <ClipboardCheck className="h-8 w-8 text-primary" />
             </div>
@@ -519,6 +537,7 @@ export function EvaluationsPage({
             </p>
           </div>
         ) : (
+          <div className="flex-1 overflow-y-auto">
           <div className="p-5 space-y-4 max-w-4xl mx-auto">
             {/* ── Student header ─────────────────────────────────────────── */}
             <div className="flex items-center justify-between gap-4">
@@ -946,8 +965,10 @@ export function EvaluationsPage({
               </div>
             )}
           </div>
+          </div>
         )}
       </main>
+      </div>
     </div>
   );
 }

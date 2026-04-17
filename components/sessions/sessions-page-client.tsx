@@ -283,7 +283,7 @@ export function SessionsPageClient({ sessions, students, needsNoteCount }: Props
         {/* ── LEFT: Caseload ── */}
         <aside className="w-64 shrink-0 flex flex-col border-r bg-sidebar overflow-hidden">
           <div className="px-4 pt-4 pb-3 border-b shrink-0">
-            <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center justify-between">
               <span className="text-sm font-semibold text-foreground">Caseload</span>
               <Badge variant="secondary" className="text-xs">{students.length}</Badge>
             </div>
