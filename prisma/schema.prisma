@@ -136,6 +136,8 @@ model User {
   lessonPlans          LessonPlan[]
   voiceNotes           VoiceNote[]
   calendarIntegrations CalendarIntegration[]
+  evaluationTemplates  EvaluationTemplate[]
+  evaluationReports    EvaluationReport[]
 
   @@map("users")
 }
@@ -178,6 +180,7 @@ model Student {
   sessionStudents    SessionStudent[]
   progressSummaries  ProgressSummary[]
   lessonPlans        LessonPlan[]
+  evaluationReports  EvaluationReport[]
 
   @@index([lastName, firstName])
   @@index([schoolName])
@@ -556,4 +559,48 @@ model SessionExternalEvent {
   @@index([sessionId])
   @@index([calendarIntegrationId])
   @@map("session_external_events")
+}
+
+// ─────────────────────────────────────────────
+// EVALUATION TEMPLATES
+// ─────────────────────────────────────────────
+
+model EvaluationTemplate {
+  id        String   @id @default(cuid())
+  userId    String
+  name      String
+  content   String   @db.Text
+  fileName  String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user    User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  reports EvaluationReport[]
+
+  @@index([userId])
+  @@map("evaluation_templates")
+}
+
+// ─────────────────────────────────────────────
+// EVALUATION REPORTS
+// ─────────────────────────────────────────────
+
+model EvaluationReport {
+  id         String   @id @default(cuid())
+  userId     String
+  studentId  String
+  templateId String?
+  title      String
+  content    String   @db.Text
+  status     String   @default("draft")
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  user     User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  student  Student             @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  template EvaluationTemplate? @relation(fields: [templateId], references: [id], onDelete: SetNull)
+
+  @@index([userId])
+  @@index([studentId])
+  @@map("evaluation_reports")
 }

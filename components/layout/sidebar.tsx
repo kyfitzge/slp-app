@@ -9,6 +9,7 @@ import {
   Settings,
   LogOut,
   BookOpen,
+  ClipboardCheck,
 } from "lucide-react";
 import { LlamaIcon } from "@/components/icons/llama-icon";
 import { cn } from "@/lib/utils";
@@ -21,6 +22,7 @@ const navItems = [
   { href: "/sessions",         label: "Session Notes",    icon: ClipboardList   },
   { href: "/progress-reports", label: "Progress Reports", icon: FileText        },
   { href: "/lesson-planning",  label: "Lesson Planning",  icon: BookOpen        },
+  { href: "/evaluations",      label: "Evaluations",      icon: ClipboardCheck  },
 ];
 
 interface SidebarProps {
