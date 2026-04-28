@@ -2,6 +2,7 @@ import { requireUser } from "@/lib/auth/get-user";
 import { ProfileForm } from "@/components/settings/profile-form";
 import { CalendarIntegrations } from "@/components/settings/calendar-integrations";
 import { CalendarConnectToast } from "@/components/settings/calendar-connect-toast";
+import { DeleteAccountSection } from "@/components/settings/delete-account-section";
 import { getCalendarIntegrations } from "@/lib/services/calendar-sync";
 
 export const metadata = { title: "Settings" };
@@ -46,6 +47,8 @@ export default async function SettingsPage({
       />
 
       <CalendarIntegrations integrations={integrations} />
+
+      <DeleteAccountSection />
     </div>
   );
 }
